@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { LoadingPage } from "@/components/LoadingPage";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getPublicUrl, supabase } from "@/lib/supabase";
 import type { SessionUser, Vehicle } from "@/lib/types";
@@ -47,7 +48,7 @@ export default function VehicleDetailPage() {
     load();
   }, [id]);
 
-  if (!user || !vehicle) return <p className="p-6">Chargement…</p>;
+  if (!user || !vehicle) return <LoadingPage />;
 
   return (
     <AppShell
@@ -57,71 +58,76 @@ export default function VehicleDetailPage() {
         { href: `/vehicles/${id}`, label: vehicle.license_plate },
       ]}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{vehicle.license_plate}</h1>
-          <p className="text-slate-600">
+          <h1 className="page-title">{vehicle.license_plate}</h1>
+          <p className="page-subtitle">
             {vehicle.make} {vehicle.model}
           </p>
         </div>
         <StatusBadge status={vehicle.status} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border bg-white p-4">
-          <h2 className="font-semibold">Informations</h2>
-          <dl className="mt-2 space-y-1 text-sm">
-            <div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="card-padded">
+          <h2 className="section-title">Informations</h2>
+          <dl className="mt-4 space-y-3 text-sm">
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <dt className="text-slate-500">VIN</dt>
-              <dd>{vehicle.vin ?? "—"}</dd>
+              <dd className="font-medium text-slate-900">{vehicle.vin ?? "—"}</dd>
             </div>
-            <div>
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <dt className="text-slate-500">Client</dt>
-              <dd>{vehicle.client_name ?? "—"}</dd>
+              <dd className="font-medium text-slate-900">{vehicle.client_name ?? "—"}</dd>
             </div>
-            <div>
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <dt className="text-slate-500">Arrivée</dt>
-              <dd>{vehicle.arrival_date}</dd>
+              <dd className="font-medium text-slate-900">{vehicle.arrival_date}</dd>
             </div>
-            <div>
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <dt className="text-slate-500">VEI</dt>
-              <dd>{vehicle.vei_procedure ? "Oui" : "Non"}</dd>
+              <dd className="font-medium text-slate-900">
+                {vehicle.vei_procedure ? "Oui" : "Non"}
+              </dd>
             </div>
             {vehicle.notes && (
               <div>
                 <dt className="text-slate-500">Notes</dt>
-                <dd>{vehicle.notes}</dd>
+                <dd className="mt-1 leading-relaxed text-slate-900">{vehicle.notes}</dd>
               </div>
             )}
           </dl>
         </section>
 
-        <section className="rounded-xl border bg-white p-4">
-          <h2 className="font-semibold">Historique</h2>
-          <ul className="mt-2 max-h-80 space-y-2 overflow-auto text-sm">
+        <section className="card-padded">
+          <h2 className="section-title">Historique</h2>
+          <ul className="mt-4 max-h-80 space-y-3 overflow-auto text-sm scrollbar-thin">
             {timeline.map((e) => (
-              <li key={e.id} className="border-b border-slate-100 pb-2">
-                <p className="font-medium">{e.action}</p>
-                <p className="text-xs text-slate-500">
+              <li key={e.id} className="border-b border-slate-100 pb-3 last:border-0">
+                <p className="font-medium text-slate-900">{e.action}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
                   {new Date(e.created_at).toLocaleString("fr-FR")}
                   {e.users?.full_name && ` · ${e.users.full_name}`}
                 </p>
               </li>
             ))}
+            {timeline.length === 0 && (
+              <p className="text-slate-500">Aucun événement enregistré.</p>
+            )}
           </ul>
         </section>
       </div>
 
       {photos.length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 font-semibold">Photos</h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <section className="mt-8">
+          <h2 className="section-title mb-4">Photos</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((src) => (
               <img
                 key={src}
                 src={src}
-                alt=""
-                className="aspect-square rounded-lg object-cover"
+                alt="Photo véhicule"
+                className="aspect-square rounded-lg border border-slate-200 object-cover shadow-sm transition-transform duration-200 hover:scale-[1.02]"
               />
             ))}
           </div>

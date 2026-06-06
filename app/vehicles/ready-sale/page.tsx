@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
+import { PageHeader } from "@/components/PageHeader";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
@@ -13,6 +17,8 @@ export default function ReadySalePage() {
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [expert, setExpert] = useState({ name: "", date: "", time: "" });
   const [saleNotes, setSaleNotes] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -25,6 +31,7 @@ export default function ReadySalePage() {
       .in("status", ["ready_to_sell", "for_sale", "reserved", "sold"])
       .order("ready_at", { ascending: false });
     setVehicles((data as Vehicle[]) ?? []);
+    setLoading(false);
   }
 
   useEffect(() => {
@@ -36,6 +43,7 @@ export default function ReadySalePage() {
       .from("vehicles")
       .update({ washed_at: new Date().toISOString() })
       .eq("id", v.id);
+    setFeedback("Véhicule marqué comme lavé.");
     load();
   }
 
@@ -49,6 +57,7 @@ export default function ReadySalePage() {
         uploaded_by: user.id,
       }))
     );
+    setFeedback("Photos finales enregistrées.");
   }
 
   async function setStatus(
@@ -68,66 +77,110 @@ export default function ReadySalePage() {
     await supabase.from("vehicles").update(extra).eq("id", v.id);
     await updateVehicleStatus(v.id, status, user);
     setSelected(null);
+    setFeedback(
+      status === "for_sale"
+        ? "Véhicule mis en vente."
+        : status === "reserved"
+          ? "Véhicule marqué comme réservé."
+          : "Véhicule marqué comme vendu."
+    );
     load();
   }
 
-  if (!user) return <p className="p-6">Chargement…</p>;
+  if (!user) return <LoadingPage />;
 
   return (
     <AppShell
       user={user}
       nav={[{ href: "/vehicles/ready-sale", label: "Préparation vente" }]}
     >
-      <h1 className="mb-2 text-2xl font-bold">Préparation vente</h1>
-      <p className="mb-6 text-sm text-amber-800 rounded-lg bg-amber-50 p-3">
+      <PageHeader
+        title="Préparation vente"
+        subtitle="Lavage, expert et mise en vente"
+      />
+
+      <Alert variant="warning" className="mb-6">
         Véhicule prêt pour lavage et mise en vente
-      </p>
+      </Alert>
+
+      {feedback && !selected && (
+        <Alert variant="success" className="mb-6">
+          {feedback}
+        </Alert>
+      )}
 
       {!selected ? (
-        <div className="space-y-3">
-          {vehicles.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setSelected(v)}
-              className="block w-full rounded-xl border bg-white p-4 text-left"
-            >
-              <p className="font-semibold">{v.license_plate}</p>
-              <p className="text-sm text-slate-600">
-                {v.make} {v.model} · {v.status}
-              </p>
-            </button>
-          ))}
-        </div>
+        loading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="skeleton h-20 rounded-xl" />
+            ))}
+          </div>
+        ) : vehicles.length === 0 ? (
+          <EmptyState
+            title="Aucun véhicule à préparer"
+            description="Les véhicules validés par l'atelier apparaîtront ici."
+          />
+        ) : (
+          <div className="space-y-3">
+            {vehicles.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => {
+                  setSelected(v);
+                  setFeedback("");
+                }}
+                className="card-interactive"
+              >
+                <p className="font-semibold">{v.license_plate}</p>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {v.make} {v.model} · {v.status}
+                </p>
+              </button>
+            ))}
+          </div>
+        )
       ) : (
-        <div className="space-y-4 rounded-xl border bg-white p-6">
-          <p className="font-semibold text-lg">{selected.license_plate}</p>
+        <div className="card-padded space-y-5">
+          <div>
+            <p className="text-lg font-semibold">{selected.license_plate}</p>
+            <p className="text-sm text-slate-600">
+              {selected.make} {selected.model}
+            </p>
+          </div>
 
-          <div className="grid gap-2 sm:grid-cols-3">
+          {feedback && (
+            <Alert variant="success">{feedback}</Alert>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
             <input
               placeholder="Expert fin de travaux"
-              className="rounded border px-3 py-2 text-sm"
+              className="input-field"
               value={expert.name}
               onChange={(e) => setExpert({ ...expert, name: e.target.value })}
             />
             <input
               type="date"
-              className="rounded border px-3 py-2 text-sm"
+              className="input-field"
               value={expert.date}
               onChange={(e) => setExpert({ ...expert, date: e.target.value })}
+              aria-label="Date expert"
             />
             <input
               type="time"
-              className="rounded border px-3 py-2 text-sm"
+              className="input-field"
               value={expert.time}
               onChange={(e) => setExpert({ ...expert, time: e.target.value })}
+              aria-label="Heure expert"
             />
           </div>
 
           <button
             type="button"
             onClick={() => markWashed(selected)}
-            className="w-full rounded-lg border py-2"
+            className="btn-secondary w-full"
           >
             Marquer lavé
           </button>
@@ -139,32 +192,34 @@ export default function ReadySalePage() {
             onUploaded={saveFinalPhotos}
           />
 
-          <textarea
-            className="w-full rounded-lg border px-3 py-2"
-            placeholder="Notes (réservé / vendu)"
-            value={saleNotes}
-            onChange={(e) => setSaleNotes(e.target.value)}
-          />
+          <label className="label-field">
+            Notes (réservé / vendu)
+            <textarea
+              className="input-field mt-1.5 resize-y"
+              value={saleNotes}
+              onChange={(e) => setSaleNotes(e.target.value)}
+            />
+          </label>
 
           <div className="grid gap-2 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => setStatus(selected, "for_sale")}
-              className="rounded-lg bg-green-700 py-2 text-white text-sm"
+              className="btn-success !w-full"
             >
               Mis en vente
             </button>
             <button
               type="button"
               onClick={() => setStatus(selected, "reserved")}
-              className="rounded-lg bg-cyan-700 py-2 text-white text-sm"
+              className="btn bg-cyan-700 text-white hover:bg-cyan-800 focus-visible:ring-cyan-600 !w-full"
             >
               Réservé
             </button>
             <button
               type="button"
               onClick={() => setStatus(selected, "sold")}
-              className="rounded-lg bg-slate-800 py-2 text-white text-sm"
+              className="btn-primary-block"
             >
               Vendu
             </button>
@@ -172,10 +227,13 @@ export default function ReadySalePage() {
 
           <button
             type="button"
-            onClick={() => setSelected(null)}
-            className="text-sm text-slate-500 underline"
+            onClick={() => {
+              setSelected(null);
+              setFeedback("");
+            }}
+            className="btn-ghost w-full"
           >
-            Retour
+            Retour à la liste
           </button>
         </div>
       )}

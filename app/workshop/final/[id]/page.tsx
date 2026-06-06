@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
+import { LoadingPage } from "@/components/LoadingPage";
 import { supabase } from "@/lib/supabase";
 import { notifyRole, updateVehicleStatus } from "@/lib/db";
 import type { SessionUser, Vehicle } from "@/lib/types";
@@ -18,6 +20,8 @@ export default function FinalValidationPage() {
     vehicle_complete: false,
     notes: "",
   });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -34,8 +38,9 @@ export default function FinalValidationPage() {
 
   async function submit() {
     if (!user || !vehicle) return;
+    setError("");
     if (!checklist.mechanics_done || !checklist.vehicle_complete) {
-      alert("Cochez au minimum mécanique terminée et véhicule complet.");
+      setError("Cochez au minimum mécanique terminée et véhicule complet.");
       return;
     }
     await supabase.from("final_checklists").upsert({
@@ -86,10 +91,10 @@ export default function FinalValidationPage() {
       `Carrosserie assignée — ${vehicle?.license_plate}`,
       id
     );
-    alert("Carrossier notifié.");
+    setSuccess("Carrossier notifié.");
   }
 
-  if (!user || !vehicle) return <p className="p-6">Chargement…</p>;
+  if (!user || !vehicle) return <LoadingPage />;
 
   return (
     <AppShell
@@ -99,9 +104,12 @@ export default function FinalValidationPage() {
         { href: `/workshop/final/${id}`, label: vehicle.license_plate },
       ]}
     >
-      <h1 className="text-2xl font-bold">Validation finale — {vehicle.license_plate}</h1>
+      <div className="mb-6">
+        <h1 className="page-title">Validation finale — {vehicle.license_plate}</h1>
+        <p className="page-subtitle">Contrôle avant passage au vendeur</p>
+      </div>
 
-      <div className="mt-6 space-y-3 rounded-xl border bg-white p-6">
+      <div className="card-padded space-y-4">
         {(
           [
             ["mechanics_done", "Mécanique terminée"],
@@ -109,7 +117,7 @@ export default function FinalValidationPage() {
             ["vehicle_complete", "Véhicule complet"],
           ] as const
         ).map(([key, label]) => (
-          <label key={key} className="flex items-center gap-2">
+          <label key={key} className="checkbox-field px-2">
             <input
               type="checkbox"
               checked={checklist[key]}
@@ -120,24 +128,24 @@ export default function FinalValidationPage() {
             {label}
           </label>
         ))}
-        <textarea
-          className="w-full rounded-lg border px-3 py-2"
-          placeholder="Notes atelier"
-          value={checklist.notes}
-          onChange={(e) => setChecklist({ ...checklist, notes: e.target.value })}
-        />
-        <button
-          type="button"
-          onClick={assignBodywork}
-          className="w-full rounded-lg border py-2 text-sm"
-        >
+
+        <label className="label-field">
+          Notes atelier
+          <textarea
+            className="input-field mt-1.5 resize-y"
+            placeholder="Observations finales…"
+            value={checklist.notes}
+            onChange={(e) => setChecklist({ ...checklist, notes: e.target.value })}
+          />
+        </label>
+
+        {error && <Alert variant="error">{error}</Alert>}
+        {success && <Alert variant="success">{success}</Alert>}
+
+        <button type="button" onClick={assignBodywork} className="btn-secondary w-full">
           Assigner carrosserie
         </button>
-        <button
-          type="button"
-          onClick={submit}
-          className="w-full rounded-lg bg-emerald-700 py-3 text-white"
-        >
+        <button type="button" onClick={submit} className="btn-success w-full !min-h-12">
           Prêt à vendre
         </button>
       </div>

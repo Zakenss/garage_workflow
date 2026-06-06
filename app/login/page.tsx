@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Alert } from "@/components/Alert";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,36 +36,41 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 py-8">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-slate-200/10 bg-white p-6 shadow-2xl sm:p-8"
       >
-        <h1 className="text-xl font-bold text-slate-900">Garage Workflow</h1>
-        <p className="mt-1 text-sm text-slate-500">Connexion atelier</p>
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+            Garage Workflow
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Connexion atelier</p>
+        </div>
 
         {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <Alert variant="error" className="mb-4">
             {error}
-          </p>
+          </Alert>
         )}
 
-        <label className="mt-6 block text-sm font-medium text-slate-700">
+        <label className="label-field">
           Identifiant
           <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
+            placeholder="ex. manager"
             required
           />
         </label>
 
-        <label className="mt-4 block text-sm font-medium text-slate-700">
+        <label className="label-field mt-4 block">
           Mot de passe
           <input
             type="password"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
@@ -75,12 +81,12 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-6 w-full rounded-lg bg-slate-900 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+          className="btn-primary-block mt-6"
         >
           {loading ? "Connexion…" : "Se connecter"}
         </button>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="mt-6 text-center text-xs leading-relaxed text-slate-400">
           Démo : manager / 1234 · secretary / 1234 · mechanic1 / 1234
         </p>
       </form>

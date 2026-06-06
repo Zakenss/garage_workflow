@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
+import { LoadingPage } from "@/components/LoadingPage";
+import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { addTimeline, notifyRole } from "@/lib/db";
 import type { SessionUser } from "@/lib/types";
@@ -20,6 +23,7 @@ export default function ArrivalsPage() {
     notes: "",
   });
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -71,6 +75,7 @@ export default function ArrivalsPage() {
         vehicle.id
       );
 
+      setMessageType("success");
       setMessage("Véhicule enregistré avec succès.");
       setForm({
         license_plate: "",
@@ -84,45 +89,50 @@ export default function ArrivalsPage() {
         notes: "",
       });
     } catch (err) {
+      setMessageType("error");
       setMessage(err instanceof Error ? err.message : "Erreur");
     } finally {
       setLoading(false);
     }
   }
 
-  if (!user) return <p className="p-6">Chargement…</p>;
+  if (!user) return <LoadingPage />;
 
   return (
     <AppShell user={user} nav={[{ href: "/vehicles/arrivals", label: "Arrivées" }]}>
-      <h1 className="mb-6 text-2xl font-bold">Arrivée véhicule</h1>
+      <PageHeader
+        title="Arrivée véhicule"
+        subtitle="Créer une fiche et notifier le chef d'atelier"
+      />
 
       {message && (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <Alert variant={messageType} className="mb-6">
           {message}
-        </p>
+        </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border bg-white p-6">
-        <Field label="Immatriculation *" required>
+      <form onSubmit={handleSubmit} className="card-padded space-y-5">
+        <Field label="Immatriculation" required>
           <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5"
             value={form.license_plate}
             onChange={(e) => setForm({ ...form, license_plate: e.target.value })}
+            placeholder="AB-123-CD"
             required
           />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Marque *" required>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Marque" required>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="input-field mt-1.5"
               value={form.make}
               onChange={(e) => setForm({ ...form, make: e.target.value })}
               required
             />
           </Field>
-          <Field label="Modèle *" required>
+          <Field label="Modèle" required>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="input-field mt-1.5"
               value={form.model}
               onChange={(e) => setForm({ ...form, model: e.target.value })}
               required
@@ -131,35 +141,37 @@ export default function ArrivalsPage() {
         </div>
         <Field label="VIN / N° série">
           <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5"
             value={form.vin}
             onChange={(e) => setForm({ ...form, vin: e.target.value })}
           />
         </Field>
-        <Field label="Date d'arrivée *">
+        <Field label="Date d'arrivée" required>
           <input
             type="date"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5"
             value={form.arrival_date}
             onChange={(e) => setForm({ ...form, arrival_date: e.target.value })}
             required
           />
         </Field>
-        <Field label="Client / provenance">
-          <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={form.client_name}
-            onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-          />
-        </Field>
-        <Field label="Provenance (complément)">
-          <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={form.provenance}
-            onChange={(e) => setForm({ ...form, provenance: e.target.value })}
-          />
-        </Field>
-        <label className="flex items-center gap-2 text-sm font-medium">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Client">
+            <input
+              className="input-field mt-1.5"
+              value={form.client_name}
+              onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+            />
+          </Field>
+          <Field label="Provenance">
+            <input
+              className="input-field mt-1.5"
+              value={form.provenance}
+              onChange={(e) => setForm({ ...form, provenance: e.target.value })}
+            />
+          </Field>
+        </div>
+        <label className="checkbox-field px-2">
           <input
             type="checkbox"
             checked={form.vei_procedure}
@@ -169,20 +181,15 @@ export default function ArrivalsPage() {
         </label>
         <Field label="Notes">
           <textarea
-            className="mt-1 min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input-field mt-1.5 min-h-[100px] resize-y"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
         </Field>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-slate-900 py-2.5 text-white disabled:opacity-60"
-        >
+        <button type="submit" disabled={loading} className="btn-primary-block">
           {loading ? "Enregistrement…" : "Créer fiche — Statut Arrivé"}
         </button>
       </form>
-
     </AppShell>
   );
 }
@@ -197,9 +204,9 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-700">
+    <label className="label-field">
       {label}
-      {required && " *"}
+      {required && <span className="text-red-500"> *</span>}
       {children}
     </label>
   );

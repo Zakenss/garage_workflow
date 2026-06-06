@@ -26,9 +26,10 @@ export function canAccess(role: UserRole, path: string): boolean {
     secretary: ["/vehicles/arrivals", "/vehicles/"],
     workshop_manager: [
       "/dashboard",
-      "/vehicles",
-      "/workshop",
-      "/users",
+      "/workshop/reception",
+      "/workshop/assign",
+      "/workshop/in-workshop",
+      "/workshop/vei",
     ],
     mechanic: ["/vehicles/my", "/vehicles/diagnostic", "/vehicles/repair"],
     storekeeper: ["/parts"],

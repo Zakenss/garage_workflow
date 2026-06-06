@@ -19,7 +19,7 @@ Application web/mobile de gestion de workflow pour garage / magasin de véhicule
 ### 2. Application
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 # Renseignez NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 npm install
@@ -27,6 +27,17 @@ npm run dev
 ```
 
 Ouvrez [http://localhost:3000](http://localhost:3000).
+
+## Déploiement Netlify
+
+1. Connectez le dépôt GitHub à Netlify.
+2. Build command : `npm run build` (déjà dans `netlify.toml`).
+3. Ajoutez les variables d'environnement :
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Déployez. Le plugin `@netlify/plugin-nextjs` gère le runtime Next.js automatiquement.
+
+> Ne lancez pas `npm run build` pendant que `npm run dev` tourne en local (risque de corruption du cache `.next`).
 
 ## Comptes démo
 

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import type { SessionUser, Vehicle } from "@/lib/types";
@@ -75,7 +77,7 @@ export default function ValidationDetailPage() {
     router.push("/dashboard");
   }
 
-  if (!user || !vehicle) return <p className="p-6">Chargement…</p>;
+  if (!user || !vehicle) return <LoadingPage />;
 
   return (
     <AppShell
@@ -85,39 +87,53 @@ export default function ValidationDetailPage() {
         { href: `/workshop/validation/${id}`, label: vehicle.license_plate },
       ]}
     >
-      <h1 className="text-2xl font-bold">Validation — {vehicle.license_plate}</h1>
-      <div className="mt-6 space-y-3">
-        {quotes.map((q) => (
-          <div key={q.id} className="flex items-center justify-between rounded-xl border bg-white p-4">
-            <div>
-              <p className="font-medium">{q.part_name}</p>
-              <p className="text-sm text-slate-500">
-                {q.quantity} × {q.unit_price} €
-              </p>
-            </div>
-            <select
-              className="rounded border px-2 py-1 text-sm"
-              value={decisions[q.id]}
-              onChange={(e) =>
-                setDecisions({
-                  ...decisions,
-                  [q.id]: e.target.value as "repair" | "replace",
-                })
-              }
-            >
-              <option value="repair">Réparer</option>
-              <option value="replace">Remplacer</option>
-            </select>
-          </div>
-        ))}
+      <div className="mb-6">
+        <h1 className="page-title">Validation — {vehicle.license_plate}</h1>
+        <p className="page-subtitle">Choisir réparer ou remplacer pour chaque ligne</p>
       </div>
-      <button
-        type="button"
-        onClick={validate}
-        className="mt-6 w-full rounded-lg bg-slate-900 py-3 text-white"
-      >
-        Valider et lancer réparation
-      </button>
+
+      {quotes.length === 0 ? (
+        <EmptyState
+          title="Aucune ligne de devis"
+          description="Le diagnostic doit être complété avant la validation."
+        />
+      ) : (
+        <div className="space-y-3">
+          {quotes.map((q) => (
+            <div
+              key={q.id}
+              className="card-padded flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900">{q.part_name}</p>
+                <p className="text-sm text-slate-500">
+                  {q.quantity} × {q.unit_price} €
+                </p>
+              </div>
+              <select
+                className="input-field !w-auto min-w-[140px]"
+                value={decisions[q.id]}
+                onChange={(e) =>
+                  setDecisions({
+                    ...decisions,
+                    [q.id]: e.target.value as "repair" | "replace",
+                  })
+                }
+                aria-label={`Décision pour ${q.part_name}`}
+              >
+                <option value="repair">Réparer</option>
+                <option value="replace">Remplacer</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {quotes.length > 0 && (
+        <button type="button" onClick={validate} className="btn-primary-block mt-6">
+          Valider et lancer réparation
+        </button>
+      )}
     </AppShell>
   );
 }

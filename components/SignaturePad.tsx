@@ -1,14 +1,40 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function SignaturePad({
   onSave,
 }: {
   onSave: (dataUrl: string) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
+
+  useEffect(() => {
+    function resize() {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const width = container.clientWidth;
+      const height = Math.max(160, Math.min(200, width * 0.4));
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(dpr, dpr);
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+      }
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
 
   function getCtx() {
     const canvas = canvasRef.current;
@@ -55,7 +81,8 @@ export function SignaturePad({
   function clear() {
     const pair = getCtx();
     if (!pair) return;
-    pair.ctx.clearRect(0, 0, pair.canvas.width, pair.canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    pair.ctx.clearRect(0, 0, pair.canvas.width / dpr, pair.canvas.height / dpr);
   }
 
   function save() {
@@ -65,30 +92,23 @@ export function SignaturePad({
   }
 
   return (
-    <div className="space-y-2">
-      <canvas
-        ref={canvasRef}
-        width={400}
-        height={160}
-        className="w-full touch-none rounded-lg border border-slate-300 bg-white"
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerLeave={end}
-      />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={clear}
-          className="rounded-lg border px-3 py-2 text-sm"
-        >
+    <div className="space-y-3">
+      <div ref={containerRef} className="w-full">
+        <canvas
+          ref={canvasRef}
+          className="w-full touch-none rounded-lg border border-slate-300 bg-white shadow-sm"
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerLeave={end}
+          aria-label="Zone de signature"
+        />
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" onClick={clear} className="btn-secondary flex-1">
           Effacer
         </button>
-        <button
-          type="button"
-          onClick={save}
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white"
-        >
+        <button type="button" onClick={save} className="btn-primary-block flex-1">
           Enregistrer signature
         </button>
       </div>

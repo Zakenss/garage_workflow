@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
+import { PageHeader } from "@/components/PageHeader";
 import { VehicleCard } from "@/components/VehicleCard";
+import { MANAGER_NAV } from "@/lib/manager";
 import { supabase } from "@/lib/supabase";
 import type { SessionUser, Vehicle } from "@/lib/types";
 
 export default function ReceptionListPage() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -21,39 +26,45 @@ export default function ReceptionListPage() {
       .eq("status", "arrived")
       .order("arrival_date", { ascending: false });
     setVehicles((data as Vehicle[]) ?? []);
+    setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  if (!user) return <p className="p-6">Chargement…</p>;
+  if (!user) return <LoadingPage />;
 
   return (
-    <AppShell
-      user={user}
-      nav={[
-        { href: "/dashboard", label: "Tableau de bord" },
-        { href: "/workshop/reception", label: "Réception" },
-        { href: "/workshop/vei", label: "VEI" },
-        { href: "/workshop/assign", label: "Dispatch" },
-      ]}
-    >
-      <h1 className="mb-6 text-2xl font-bold">Réception atelier</h1>
-      <p className="mb-4 text-sm text-slate-600">Véhicules arrivés en attente de réception</p>
-      <div className="space-y-3">
-        {vehicles.map((v) => (
-          <VehicleCard
-            key={v.id}
-            vehicle={v}
-            href={`/workshop/reception/${v.id}`}
-            subtitle={v.client_name ?? undefined}
-          />
-        ))}
-        {vehicles.length === 0 && (
-          <p className="text-slate-500">Aucun véhicule en attente.</p>
-        )}
-      </div>
+    <AppShell user={user} nav={[...MANAGER_NAV]}>
+      <PageHeader
+        title="Réception atelier"
+        subtitle="Véhicules arrivés — VIN, photos et VEI"
+      />
+
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="skeleton h-24 rounded-xl" />
+          ))}
+        </div>
+      ) : vehicles.length === 0 ? (
+        <EmptyState
+          title="Aucun véhicule en attente"
+          description="Les nouveaux arrivages apparaîtront ici."
+        />
+      ) : (
+        <div className="space-y-3">
+          {vehicles.map((v) => (
+            <VehicleCard
+              key={v.id}
+              vehicle={v}
+              href={`/workshop/reception/${v.id}`}
+              subtitle={v.client_name ?? undefined}
+            />
+          ))}
+        </div>
+      )}
     </AppShell>
   );
 }

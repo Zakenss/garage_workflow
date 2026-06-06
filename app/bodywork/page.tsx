@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
+import { PageHeader } from "@/components/PageHeader";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
@@ -20,6 +23,7 @@ export default function BodyworkPage() {
   const [items, setItems] = useState<BodyworkRow[]>([]);
   const [selected, setSelected] = useState<BodyworkRow | null>(null);
   const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -34,6 +38,7 @@ export default function BodyworkPage() {
       .neq("status", "completed")
       .order("created_at", { ascending: false });
     setItems((data as BodyworkRow[]) ?? []);
+    setLoading(false);
   }
 
   useEffect(() => {
@@ -80,44 +85,64 @@ export default function BodyworkPage() {
     load();
   }
 
-  if (!user) return <p className="p-6">Chargement…</p>;
+  if (!user) return <LoadingPage />;
 
   return (
     <AppShell user={user} nav={[{ href: "/bodywork", label: "Carrosserie" }]}>
-      <h1 className="mb-6 text-2xl font-bold">Carrosserie</h1>
+      <PageHeader
+        title="Carrosserie"
+        subtitle="Photos avant/après et suivi des travaux"
+      />
 
       {!selected ? (
-        <div className="space-y-3">
-          {items.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => {
-                setSelected(b);
-                setNotes(b.notes ?? "");
-              }}
-              className="block w-full rounded-xl border bg-white p-4 text-left hover:bg-slate-50"
-            >
-              <p className="font-semibold">{b.vehicles.license_plate}</p>
-              <p className="text-sm text-slate-600">
-                {b.vehicles.make} {b.vehicles.model}
-              </p>
-            </button>
-          ))}
-          {items.length === 0 && (
-            <p className="text-slate-500">Aucune carrosserie assignée.</p>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4 rounded-xl border bg-white p-6">
-          <p className="font-semibold">{selected.vehicles.license_plate}</p>
-          <textarea
-            className="w-full rounded-lg border px-3 py-2"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Notes carrosserie"
+        loading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="skeleton h-20 rounded-xl" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="Aucune carrosserie assignée"
+            description="Les véhicules vous seront assignés par le chef d'atelier."
           />
+        ) : (
+          <div className="space-y-3">
+            {items.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => {
+                  setSelected(b);
+                  setNotes(b.notes ?? "");
+                }}
+                className="card-interactive"
+              >
+                <p className="font-semibold">{b.vehicles.license_plate}</p>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {b.vehicles.make} {b.vehicles.model}
+                </p>
+              </button>
+            ))}
+          </div>
+        )
+      ) : (
+        <div className="card-padded space-y-5">
+          <div>
+            <p className="text-lg font-semibold">{selected.vehicles.license_plate}</p>
+            <p className="text-sm text-slate-600">
+              {selected.vehicles.make} {selected.vehicles.model}
+            </p>
+          </div>
+          <label className="label-field">
+            Notes carrosserie
+            <textarea
+              className="input-field mt-1.5 resize-y"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
           <PhotoUpload
             bucket="bodywork-photos"
             pathPrefix={selected.id}
@@ -130,29 +155,21 @@ export default function BodyworkPage() {
             label="Photos après"
             onUploaded={(p) => savePhotos(p, "after")}
           />
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
               onClick={() => setSelected(null)}
-              className="flex-1 rounded-lg border py-2"
+              className="btn-secondary flex-1"
             >
               Retour
             </button>
             {selected.status === "not_started" && (
-              <button
-                type="button"
-                onClick={start}
-                className="flex-1 rounded-lg bg-slate-900 py-2 text-white"
-              >
+              <button type="button" onClick={start} className="btn-primary-block flex-1">
                 Démarrer
               </button>
             )}
             {selected.status === "in_progress" && (
-              <button
-                type="button"
-                onClick={complete}
-                className="flex-1 rounded-lg bg-emerald-700 py-2 text-white"
-              >
+              <button type="button" onClick={complete} className="btn-success flex-1 !w-full">
                 Terminer carrosserie
               </button>
             )}

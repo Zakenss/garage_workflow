@@ -4,7 +4,7 @@ import type { VehicleStatus } from "@/lib/types";
 export function StatusBadge({ status }: { status: VehicleStatus }) {
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
+      className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-medium leading-none ${STATUS_COLORS[status]}`}
     >
       {STATUS_LABELS[status]}
     </span>

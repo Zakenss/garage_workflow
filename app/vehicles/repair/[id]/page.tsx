@@ -3,9 +3,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { LoadingPage } from "@/components/LoadingPage";
 import { supabase } from "@/lib/supabase";
 import { notifyRole, updateVehicleStatus } from "@/lib/db";
 import type { SessionUser, Vehicle } from "@/lib/types";
+
+const STATUS_LABELS: Record<string, string> = {
+  not_started: "Non démarrée",
+  in_progress: "En cours",
+  completed: "Terminée",
+};
 
 export default function RepairPage() {
   const { id } = useParams<{ id: string }>();
@@ -81,7 +88,7 @@ export default function RepairPage() {
     router.push("/vehicles/my");
   }
 
-  if (!user || !vehicle) return <p className="p-6">Chargement…</p>;
+  if (!user || !vehicle) return <LoadingPage />;
 
   return (
     <AppShell
@@ -91,31 +98,36 @@ export default function RepairPage() {
         { href: `/vehicles/repair/${id}`, label: "Réparation" },
       ]}
     >
-      <h1 className="text-2xl font-bold">Réparation — {vehicle.license_plate}</h1>
-      <div className="mt-6 space-y-4 rounded-xl border bg-white p-6">
-        <p className="text-sm text-slate-600">Statut : {status}</p>
-        <textarea
-          className="w-full rounded-lg border px-3 py-2"
-          rows={4}
-          placeholder="Commentaires / étapes"
-          value={comments}
-          onChange={(e) => setComments(e.target.value)}
-        />
+      <div className="mb-6">
+        <h1 className="page-title">Réparation — {vehicle.license_plate}</h1>
+        <p className="page-subtitle">
+          {vehicle.make} {vehicle.model}
+        </p>
+      </div>
+
+      <div className="card-padded space-y-5">
+        <div className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+          Statut : {STATUS_LABELS[status] ?? status}
+        </div>
+
+        <label className="label-field">
+          Commentaires / étapes
+          <textarea
+            className="input-field mt-1.5 resize-y"
+            rows={4}
+            placeholder="Décrivez les travaux effectués…"
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+          />
+        </label>
+
         {status === "not_started" && (
-          <button
-            type="button"
-            onClick={startRepair}
-            className="w-full rounded-lg bg-slate-900 py-3 text-white"
-          >
+          <button type="button" onClick={startRepair} className="btn-primary-block">
             Commencer réparation
           </button>
         )}
         {status === "in_progress" && (
-          <button
-            type="button"
-            onClick={completeRepair}
-            className="w-full rounded-lg bg-emerald-700 py-3 text-white"
-          >
+          <button type="button" onClick={completeRepair} className="btn-success w-full !min-h-12">
             Réparation terminée
           </button>
         )}

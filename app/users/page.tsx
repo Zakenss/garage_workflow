@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { LoadingPage } from "@/components/LoadingPage";
+import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { SessionUser, User, UserRole } from "@/lib/types";
@@ -75,7 +77,7 @@ export default function UsersPage() {
     load();
   }
 
-  if (!user) return <p className="p-6">Chargement…</p>;
+  if (!user) return <LoadingPage />;
 
   return (
     <AppShell
@@ -85,39 +87,41 @@ export default function UsersPage() {
         { href: "/users", label: "Utilisateurs" },
       ]}
     >
-      <h1 className="mb-6 text-2xl font-bold">Gestion utilisateurs</h1>
+      <PageHeader
+        title="Gestion utilisateurs"
+        subtitle="Créer et gérer les comptes atelier"
+      />
 
-      <form
-        onSubmit={saveUser}
-        className="mb-8 space-y-3 rounded-xl border bg-white p-6"
-      >
-        <h2 className="font-semibold">
+      <form onSubmit={saveUser} className="card-padded mb-8 space-y-4">
+        <h2 className="section-title">
           {editing ? "Modifier utilisateur" : "Nouvel utilisateur"}
         </h2>
         <input
           placeholder="Nom complet"
-          className="w-full rounded-lg border px-3 py-2"
+          className="input-field"
           value={form.full_name}
           onChange={(e) => setForm({ ...form, full_name: e.target.value })}
           required
         />
-        <input
-          placeholder="Identifiant"
-          className="w-full rounded-lg border px-3 py-2"
-          value={form.username}
-          onChange={(e) => setForm({ ...form, username: e.target.value })}
-          required
-        />
-        <input
-          placeholder="Mot de passe"
-          type="password"
-          className="w-full rounded-lg border px-3 py-2"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-          required
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <input
+            placeholder="Identifiant"
+            className="input-field"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            required
+          />
+          <input
+            placeholder="Mot de passe"
+            type="password"
+            className="input-field"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            required
+          />
+        </div>
         <select
-          className="w-full rounded-lg border px-3 py-2"
+          className="input-field"
           value={form.role}
           onChange={(e) =>
             setForm({ ...form, role: e.target.value as UserRole })
@@ -135,37 +139,54 @@ export default function UsersPage() {
             type="number"
             min={1}
             max={3}
-            className="w-full rounded-lg border px-3 py-2"
+            className="input-field"
             value={form.mechanic_slot}
             onChange={(e) => setForm({ ...form, mechanic_slot: e.target.value })}
           />
         )}
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white"
-        >
-          {editing ? "Mettre à jour" : "Créer"}
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button type="submit" className="btn-primary-block sm:!w-auto">
+            {editing ? "Mettre à jour" : "Créer"}
+          </button>
+          {editing && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setForm({
+                  full_name: "",
+                  username: "",
+                  password: "1234",
+                  role: "mechanic",
+                  mechanic_slot: "",
+                });
+              }}
+              className="btn-secondary"
+            >
+              Annuler
+            </button>
+          )}
+        </div>
       </form>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {users.map((u) => (
           <div
             key={u.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white p-4"
+            className="card-padded flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div>
-              <p className="font-medium">
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900">
                 {u.full_name}{" "}
                 {!u.active && (
-                  <span className="text-xs text-red-600">(inactif)</span>
+                  <span className="text-xs font-normal text-red-600">(inactif)</span>
                 )}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="mt-0.5 text-sm text-slate-500">
                 {u.username} · {ROLE_LABELS[u.role]}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -178,7 +199,7 @@ export default function UsersPage() {
                     mechanic_slot: u.mechanic_slot?.toString() ?? "",
                   });
                 }}
-                className="rounded border px-3 py-1 text-sm"
+                className="btn-secondary !min-h-10 !px-3"
               >
                 Modifier
               </button>
@@ -186,7 +207,7 @@ export default function UsersPage() {
                 <button
                   type="button"
                   onClick={() => deactivate(u)}
-                  className="rounded border border-red-200 px-3 py-1 text-sm text-red-700"
+                  className="btn-danger !min-h-10 !px-3"
                 >
                   Désactiver
                 </button>
