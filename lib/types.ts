@@ -58,6 +58,7 @@ export interface Vehicle {
   sale_notes: string | null;
   assigned_mechanic_id: string | null;
   assigned_bodyworker_id: string | null;
+  dispatch_priority: number | null;
   created_at: string;
   updated_at: string;
 }

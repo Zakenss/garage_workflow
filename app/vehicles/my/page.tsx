@@ -26,9 +26,11 @@ export default function MyVehiclesPage() {
       .eq("assigned_mechanic_id", user.id)
       .in("status", [
         "diagnostic_assigned",
-        "repair_in_progress",
+        "parts_pending",
         "validation_pending",
+        "repair_in_progress",
       ])
+      .order("dispatch_priority", { ascending: true, nullsFirst: false })
       .order("updated_at", { ascending: false });
     setVehicles((data as Vehicle[]) ?? []);
     setLoading(false);
@@ -47,7 +49,7 @@ export default function MyVehiclesPage() {
     >
       <PageHeader
         title="Mes véhicules"
-        subtitle="Diagnostics et réparations assignés"
+        subtitle="Check-list de reconditionnement — ordre défini par le chef d'atelier"
       />
 
       {loading ? (
@@ -67,11 +69,8 @@ export default function MyVehiclesPage() {
             <VehicleCard
               key={v.id}
               vehicle={v}
-              href={
-                v.status === "diagnostic_assigned"
-                  ? `/vehicles/diagnostic/${v.id}`
-                  : `/vehicles/repair/${v.id}`
-              }
+              showPriority
+              href={`/vehicles/checklist/${v.id}`}
             />
           ))}
         </div>

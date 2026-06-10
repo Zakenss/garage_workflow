@@ -5,8 +5,11 @@ import { useParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { StatusBadge } from "@/components/StatusBadge";
+import { WorkflowProgress } from "@/components/WorkflowProgress";
+import { STATUS_LABELS, TIMELINE_LABELS } from "@/lib/constants";
+import { SECRETARY_NAV } from "@/lib/secretary";
 import { getPublicUrl, supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { SessionUser, Vehicle, VehicleStatus } from "@/lib/types";
 
 type TimelineEntry = {
   id: string;
@@ -16,12 +19,40 @@ type TimelineEntry = {
   users?: { full_name: string } | null;
 };
 
+function timelineLabel(entry: TimelineEntry): string {
+  if (entry.action === "status_change" && entry.details?.status) {
+    const s = entry.details.status as VehicleStatus;
+    return `Statut : ${STATUS_LABELS[s] ?? s}`;
+  }
+  return TIMELINE_LABELS[entry.action] ?? entry.action;
+}
+
+function navForRole(user: SessionUser, vehicle: Vehicle) {
+  if (user.role === "secretary") {
+    return [
+      ...SECRETARY_NAV,
+      { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
+    ];
+  }
+  if (user.role === "seller") {
+    return [
+      { href: "/vehicles/ready-sale", label: "Préparation vente" },
+      { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
+    ];
+  }
+  return [
+    { href: "/dashboard", label: "Tableau de bord" },
+    { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
+  ];
+}
+
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [mechanicName, setMechanicName] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -31,12 +62,27 @@ export default function VehicleDetailPage() {
     async function load() {
       const { data: v } = await supabase.from("vehicles").select("*").eq("id", id).single();
       setVehicle(v as Vehicle);
+
+      if (v?.assigned_mechanic_id) {
+        const { data: mech } = await supabase
+          .from("users")
+          .select("full_name, mechanic_slot")
+          .eq("id", v.assigned_mechanic_id)
+          .single();
+        if (mech) {
+          setMechanicName(
+            `Mécanicien ${mech.mechanic_slot ?? "?"} — ${mech.full_name}`
+          );
+        }
+      }
+
       const { data: t } = await supabase
         .from("vehicle_timeline")
         .select("*, users(full_name)")
         .eq("vehicle_id", id)
         .order("created_at", { ascending: false });
       setTimeline((t as TimelineEntry[]) ?? []);
+
       const { data: p } = await supabase
         .from("vehicle_photos")
         .select("storage_path")
@@ -46,19 +92,30 @@ export default function VehicleDetailPage() {
       );
     }
     load();
+
+    const ch = supabase
+      .channel(`vehicle-detail-${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vehicles", filter: `id=eq.${id}` },
+        () => load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "vehicle_timeline", filter: `vehicle_id=eq.${id}` },
+        () => load()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [id]);
 
   if (!user || !vehicle) return <LoadingPage />;
 
   return (
-    <AppShell
-      user={user}
-      nav={[
-        { href: "/dashboard", label: "Tableau de bord" },
-        { href: `/vehicles/${id}`, label: vehicle.license_plate },
-      ]}
-    >
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <AppShell user={user} nav={navForRole(user, vehicle)}>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="page-title">{vehicle.license_plate}</h1>
           <p className="page-subtitle">
@@ -67,6 +124,11 @@ export default function VehicleDetailPage() {
         </div>
         <StatusBadge status={vehicle.status} />
       </div>
+
+      <section className="card-padded mb-6">
+        <h2 className="section-title mb-4">Avancement</h2>
+        <WorkflowProgress status={vehicle.status} />
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card-padded">
@@ -90,6 +152,12 @@ export default function VehicleDetailPage() {
                 {vehicle.vei_procedure ? "Oui" : "Non"}
               </dd>
             </div>
+            {mechanicName && (
+              <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+                <dt className="text-slate-500">Mécanicien</dt>
+                <dd className="font-medium text-slate-900">{mechanicName}</dd>
+              </div>
+            )}
             {vehicle.notes && (
               <div>
                 <dt className="text-slate-500">Notes</dt>
@@ -101,10 +169,10 @@ export default function VehicleDetailPage() {
 
         <section className="card-padded">
           <h2 className="section-title">Historique</h2>
-          <ul className="mt-4 max-h-80 space-y-3 overflow-auto text-sm scrollbar-thin">
+          <ul className="mt-4 max-h-96 space-y-3 overflow-auto text-sm scrollbar-thin">
             {timeline.map((e) => (
               <li key={e.id} className="border-b border-slate-100 pb-3 last:border-0">
-                <p className="font-medium text-slate-900">{e.action}</p>
+                <p className="font-medium text-slate-900">{timelineLabel(e)}</p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {new Date(e.created_at).toLocaleString("fr-FR")}
                   {e.users?.full_name && ` · ${e.users.full_name}`}
@@ -120,14 +188,14 @@ export default function VehicleDetailPage() {
 
       {photos.length > 0 && (
         <section className="mt-8">
-          <h2 className="section-title mb-4">Photos</h2>
+          <h2 className="section-title mb-4">Photos réception</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((src) => (
               <img
                 key={src}
                 src={src}
                 alt="Photo véhicule"
-                className="aspect-square rounded-lg border border-slate-200 object-cover shadow-sm transition-transform duration-200 hover:scale-[1.02]"
+                className="aspect-square rounded-lg border border-slate-200 object-cover shadow-sm"
               />
             ))}
           </div>

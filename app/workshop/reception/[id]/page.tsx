@@ -6,13 +6,15 @@ import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { StatusBadge } from "@/components/StatusBadge";
+import { MechanicSlotButtons } from "@/components/MechanicSlotButtons";
+import { VeiStatusPicker } from "@/components/VeiStatusPicker";
 import { MANAGER_NAV } from "@/lib/manager";
+import { assignVehicleToMechanic, updateVeiStatus, type VeiStatus } from "@/lib/manager-actions";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import { VEI_STATUS_LABELS } from "@/lib/constants";
-import type { SessionUser, Vehicle } from "@/lib/types";
-
-const VEI_STATUSES = ["to_schedule", "scheduled", "completed"] as const;
+import type { SessionUser, User, Vehicle } from "@/lib/types";
 
 export default function ReceptionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +29,7 @@ export default function ReceptionDetailPage() {
   const [veiFeedback, setVeiFeedback] = useState("");
   const [savingReception, setSavingReception] = useState(false);
   const [savingVei, setSavingVei] = useState(false);
+  const [veiCaseId, setVeiCaseId] = useState<string | null>(null);
   const [vei, setVei] = useState<{
     status: string;
     expert_name: string;
@@ -34,6 +37,8 @@ export default function ReceptionDetailPage() {
     appointment_time: string;
     notes: string;
   } | null>(null);
+  const [mechanics, setMechanics] = useState<User[]>([]);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -57,6 +62,7 @@ export default function ReceptionDetailPage() {
         .eq("vehicle_id", id)
         .single();
       if (vc) {
+        setVeiCaseId(vc.id);
         setVei({
           status: vc.status,
           expert_name: vc.expert_name ?? "",
@@ -70,6 +76,13 @@ export default function ReceptionDetailPage() {
 
   useEffect(() => {
     load();
+    supabase
+      .from("users")
+      .select("id, full_name, mechanic_slot")
+      .eq("role", "mechanic")
+      .eq("active", true)
+      .order("mechanic_slot")
+      .then(({ data }) => setMechanics((data as User[]) ?? []));
   }, [id]);
 
   async function savePhotos(paths: string[], photoType: "exterior" | "exterior_extra" = "exterior") {
@@ -107,6 +120,21 @@ export default function ReceptionDetailPage() {
       setError("Impossible d'enregistrer la réception.");
     } finally {
       setSavingReception(false);
+    }
+  }
+
+  async function changeVeiStatus(status: VeiStatus) {
+    if (!user || !vei || !veiCaseId || vei.status === status) return;
+    setSavingVei(true);
+    setVeiFeedback("");
+    try {
+      await updateVeiStatus(veiCaseId, status, user, id);
+      setVei({ ...vei, status });
+      setVeiFeedback(`Statut VEI : ${VEI_STATUS_LABELS[status]}`);
+    } catch {
+      setError("Impossible de mettre à jour le statut VEI.");
+    } finally {
+      setSavingVei(false);
     }
   }
 
@@ -163,37 +191,75 @@ export default function ReceptionDetailPage() {
       .update({ vin: vin.trim(), workshop_notes: receptionNotes || null })
       .eq("id", id);
     await updateVehicleStatus(id, "in_workshop", user);
-    router.push("/workshop/assign");
+    router.push(`/workshop/in-workshop?new=${id}&tab=assign`);
+  }
+
+  async function assignFromReception(mechanicId: string) {
+    if (!user || !vehicle) return;
+    setAssigning(true);
+    try {
+      await assignVehicleToMechanic(vehicle.id, mechanicId, user, {
+        licensePlate: vehicle.license_plate,
+      });
+      router.push("/workshop/in-workshop?tab=active");
+    } finally {
+      setAssigning(false);
+    }
   }
 
   if (!user || !vehicle) return <LoadingPage />;
 
-  if (vehicle.status !== "arrived") {
-    return (
-      <AppShell user={user} nav={[...MANAGER_NAV]}>
-        <Alert variant="warning" className="mb-4">
-          Ce véhicule n&apos;est plus en statut « Arrivé ».
-        </Alert>
-        <button
-          type="button"
-          onClick={() => router.push("/workshop/reception")}
-          className="btn-secondary"
-        >
-          Retour à la réception
-        </button>
-      </AppShell>
-    );
-  }
+  const isArrived = vehicle.status === "arrived";
+  const awaitingAssign = vehicle.status === "in_workshop";
 
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
-      <div className="mb-6">
-        <h1 className="page-title">{vehicle.license_plate}</h1>
-        <p className="page-subtitle">
-          {vehicle.make} {vehicle.model}
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="page-title">{vehicle.license_plate}</h1>
+          <p className="page-subtitle">
+            {vehicle.make} {vehicle.model}
+          </p>
+        </div>
+        <StatusBadge status={vehicle.status} />
       </div>
 
+      {!isArrived && !awaitingAssign && (
+        <Alert variant="info" className="mb-6">
+          Réception terminée. Vous pouvez toujours modifier le statut VEI ci-dessous.
+        </Alert>
+      )}
+
+      {awaitingAssign && (
+        <Alert variant="success" className="mb-6">
+          Ce véhicule est en atelier — assignez-le à un mécanicien ci-dessous ou via
+          l&apos;onglet <strong>Atelier → À assigner</strong>.
+        </Alert>
+      )}
+
+      {awaitingAssign && (
+        <div className="card-padded mb-6 space-y-4">
+          <h2 className="section-title">Assigner à un mécanicien</h2>
+          <p className="text-sm text-slate-500">
+            Cliquez sur Mécan. 1, 2 ou 3 — statut « Diagnostic assigné » et notification
+            au mécanicien.
+          </p>
+          <MechanicSlotButtons
+            mechanics={mechanics}
+            disabled={assigning}
+            onAssign={(mechanicId) => assignFromReception(mechanicId)}
+          />
+          <button
+            type="button"
+            onClick={() => router.push(`/workshop/in-workshop?new=${id}&tab=assign`)}
+            className="btn-secondary w-full"
+          >
+            Ouvrir dans Atelier
+          </button>
+        </div>
+      )}
+
+      {isArrived ? (
       <div className="card-padded space-y-5">
         <h2 className="section-title">Réception véhicule</h2>
         <p className="text-sm text-slate-500">
@@ -258,6 +324,23 @@ export default function ReceptionDetailPage() {
           {savingReception ? "Enregistrement…" : "Enregistrer la réception"}
         </button>
       </div>
+      ) : (
+        <div className="card-padded mb-6 space-y-2 text-sm">
+          <p>
+            <span className="text-slate-500">VIN :</span>{" "}
+            <span className="font-medium">{vehicle.vin ?? "—"}</span>
+          </p>
+          <p>
+            <span className="text-slate-500">Photos :</span>{" "}
+            <span className="font-medium">{photoCount}</span>
+          </p>
+          {vehicle.workshop_notes && (
+            <p>
+              <span className="text-slate-500">Notes :</span> {vehicle.workshop_notes}
+            </p>
+          )}
+        </div>
+      )}
 
       {vehicle.vei_procedure && (
         <>
@@ -273,11 +356,23 @@ export default function ReceptionDetailPage() {
               </p>
 
               <p className="text-sm font-medium text-slate-700">
-                Statut expertise :{" "}
+                Statut actuel :{" "}
                 <span className="text-amber-800">
                   {VEI_STATUS_LABELS[vei.status] ?? vei.status}
                 </span>
               </p>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">
+                  Changer le statut (1 clic)
+                </p>
+                <VeiStatusPicker
+                  status={vei.status}
+                  disabled={savingVei}
+                  onChange={changeVeiStatus}
+                />
+              </div>
+
               <label className="label-field">
                 Nom de l&apos;expert
                 <input
@@ -318,20 +413,6 @@ export default function ReceptionDetailPage() {
                   onChange={(e) => setVei({ ...vei, notes: e.target.value })}
                 />
               </label>
-              <label className="label-field">
-                Statut
-                <select
-                  className="input-field mt-1.5"
-                  value={vei.status}
-                  onChange={(e) => setVei({ ...vei, status: e.target.value })}
-                >
-                  {VEI_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {VEI_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
 
               {veiFeedback && <Alert variant="success">{veiFeedback}</Alert>}
 
@@ -339,15 +420,16 @@ export default function ReceptionDetailPage() {
                 type="button"
                 onClick={saveVei}
                 disabled={savingVei}
-                className="btn-warning w-full"
+                className="btn-secondary w-full"
               >
-                {savingVei ? "Enregistrement…" : "Enregistrer planification VEI"}
+                {savingVei ? "Enregistrement…" : "Enregistrer détails VEI"}
               </button>
             </div>
           )}
         </>
       )}
 
+      {isArrived && (
       <div className={`space-y-4 ${vehicle.vei_procedure ? "card-padded mt-6" : "mt-6"}`}>
         {vehicle.vei_procedure && (
           <>
@@ -363,6 +445,26 @@ export default function ReceptionDetailPage() {
           Envoyer à l&apos;atelier
         </button>
       </div>
+      )}
+
+      {!isArrived && !awaitingAssign && (
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/workshop/in-workshop")}
+            className="btn-secondary"
+          >
+            Voir atelier
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/workshop/vei")}
+            className="btn-ghost"
+          >
+            Liste VEI
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

@@ -23,15 +23,18 @@ export function canAccess(role: UserRole, path: string): boolean {
   if (path.startsWith("/login")) return true;
 
   const rules: Partial<Record<UserRole, string[]>> = {
-    secretary: ["/vehicles/arrivals", "/vehicles/"],
+    secretary: ["/vehicles/arrivals", "/vehicles/tracking", "/vehicles/"],
     workshop_manager: [
       "/dashboard",
       "/workshop/reception",
       "/workshop/assign",
       "/workshop/in-workshop",
+      "/workshop/queue",
+      "/workshop/vehicle",
       "/workshop/vei",
+      "/parts",
     ],
-    mechanic: ["/vehicles/my", "/vehicles/diagnostic", "/vehicles/repair"],
+    mechanic: ["/vehicles/my", "/vehicles/checklist", "/vehicles/diagnostic", "/vehicles/repair"],
     storekeeper: ["/parts"],
     bodyworker: ["/bodywork"],
     seller: ["/vehicles/ready-sale", "/vehicles/"],

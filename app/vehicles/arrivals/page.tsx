@@ -7,6 +7,7 @@ import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { addTimeline, notifyRole } from "@/lib/db";
+import { SECRETARY_NAV } from "@/lib/secretary";
 import type { SessionUser } from "@/lib/types";
 
 export default function ArrivalsPage() {
@@ -99,7 +100,7 @@ export default function ArrivalsPage() {
   if (!user) return <LoadingPage />;
 
   return (
-    <AppShell user={user} nav={[{ href: "/vehicles/arrivals", label: "Arrivées" }]}>
+    <AppShell user={user} nav={[...SECRETARY_NAV]}>
       <PageHeader
         title="Arrivée véhicule"
         subtitle="Créer une fiche et notifier le chef d'atelier"
