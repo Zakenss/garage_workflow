@@ -1,30 +1,65 @@
 "use client";
 
 import { useState } from "react";
+import { ChecklistIssueModal } from "@/components/ChecklistIssueModal";
 import {
   addChecklistItem,
   countChecklistProgress,
   deleteChecklistItem,
   toggleChecklistItem,
+  updateChecklistItemIssue,
+  type ChecklistItemIssue,
   type ChecklistState,
 } from "@/lib/reconditioning-checklist";
+
+type IssueTarget = {
+  sectionId: string;
+  groupId: string;
+  itemId: string;
+  itemLabel: string;
+};
 
 export function ReconditioningChecklist({
   state,
   onChange,
   readOnly,
+  enableIssues,
+  issuePhotoPrefix,
 }: {
   state: ChecklistState;
   onChange: (next: ChecklistState) => void;
   readOnly?: boolean;
+  enableIssues?: boolean;
+  issuePhotoPrefix?: string;
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [issueTarget, setIssueTarget] = useState<IssueTarget | null>(null);
   const progress = countChecklistProgress(state);
   const pct =
     progress.total > 0 ? Math.round((progress.checked / progress.total) * 100) : 0;
 
   function draftKey(sectionId: string, groupId: string) {
     return `${sectionId}::${groupId}`;
+  }
+
+  function findItemIssue(target: IssueTarget): ChecklistItemIssue | undefined {
+    const sec = state.sections.find((s) => s.id === target.sectionId);
+    const grp = sec?.groups.find((g) => g.id === target.groupId);
+    return grp?.items.find((i) => i.id === target.itemId)?.issue;
+  }
+
+  function handleIssueSave(issue: ChecklistItemIssue) {
+    if (!issueTarget) return;
+    onChange(
+      updateChecklistItemIssue(
+        state,
+        issueTarget.sectionId,
+        issueTarget.groupId,
+        issueTarget.itemId,
+        issue
+      )
+    );
+    setIssueTarget(null);
   }
 
   return (
@@ -90,6 +125,34 @@ export function ReconditioningChecklist({
                           {it.label}
                         </span>
                       </label>
+
+                      {enableIssues && !readOnly && issuePhotoPrefix && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIssueTarget({
+                              sectionId: sec.id,
+                              groupId: grp.id,
+                              itemId: it.id,
+                              itemLabel: it.label,
+                            })
+                          }
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+                            it.issue
+                              ? "bg-amber-100 text-amber-800 ring-1 ring-amber-300"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                          title={
+                            it.issue
+                              ? "Modifier le signalement"
+                              : "Signaler un problème"
+                          }
+                          aria-label={`Signaler un problème — ${it.label}`}
+                        >
+                          !
+                        </button>
+                      )}
+
                       {!readOnly && (
                         <button
                           type="button"
@@ -153,6 +216,16 @@ export function ReconditioningChecklist({
           </div>
         </details>
       ))}
+
+      {issueTarget && issuePhotoPrefix && (
+        <ChecklistIssueModal
+          itemLabel={issueTarget.itemLabel}
+          initialIssue={findItemIssue(issueTarget)}
+          photoPrefix={`${issuePhotoPrefix}/issues/${issueTarget.itemId}`}
+          onSave={handleIssueSave}
+          onClose={() => setIssueTarget(null)}
+        />
+      )}
     </div>
   );
 }

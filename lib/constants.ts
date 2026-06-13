@@ -62,12 +62,23 @@ export const VEI_STATUS_LABELS: Record<string, string> = {
   completed: "Réalisé",
 };
 
+export const PART_STATUS_LABELS: Record<string, string> = {
+  in_stock: "En stock",
+  to_order: "À commander",
+  ordered: "Commandée",
+  received: "Reçue",
+};
+
+export const PART_STATUSES = ["in_stock", "to_order", "ordered", "received"] as const;
+
 export const TIMELINE_LABELS: Record<string, string> = {
   vehicle_arrived: "Véhicule enregistré à l'arrivée",
   mechanic_assigned: "Mécanicien assigné",
   mechanic_reassigned: "Mécanicien changé",
   vei_status_change: "Statut VEI mis à jour",
   status_change: "Changement de statut",
+  followup_repair_started: "Réparation complémentaire démarrée",
+  followup_repair_completed: "Réparation complémentaire terminée",
 };
 
 export const WORKFLOW_STEP_LABELS: Record<string, string> = {

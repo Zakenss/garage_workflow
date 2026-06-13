@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
+import { BODYWORKER_NAV } from "@/lib/role-nav";
 import type { SessionUser } from "@/lib/types";
 
 type BodyworkRow = {
@@ -88,7 +89,7 @@ export default function BodyworkPage() {
   if (!user) return <LoadingPage />;
 
   return (
-    <AppShell user={user} nav={[{ href: "/bodywork", label: "Carrosserie" }]}>
+    <AppShell user={user} nav={[...BODYWORKER_NAV]}>
       <PageHeader
         title="Carrosserie"
         subtitle="Photos avant/après et suivi des travaux"

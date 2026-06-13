@@ -15,6 +15,8 @@ import {
   parseChecklistState,
   type ChecklistState,
 } from "@/lib/reconditioning-checklist";
+import { syncChecklistPartsToDb } from "@/lib/sync-checklist-parts";
+import { syncChecklistToReportedIssues } from "@/lib/mechanic-issues";
 import type { SessionUser, Vehicle } from "@/lib/types";
 
 export default function ReconditioningChecklistPage() {
@@ -51,6 +53,11 @@ export default function ReconditioningChecklistPage() {
       setDiagnosticId(existing.id);
       setChecklist(parseChecklistState(existing.checklist_data));
       if (existing.signature_data) setSignature(existing.signature_data);
+      if (existing.checklist_data) {
+        const parsed = parseChecklistState(existing.checklist_data);
+        await syncChecklistPartsToDb(vehicleId, existing.id, parsed);
+        await syncChecklistToReportedIssues(vehicleId, mechanicId, parsed);
+      }
       return existing.id;
     }
 
@@ -88,10 +95,21 @@ export default function ReconditioningChecklistPage() {
         .from("diagnostics")
         .update({ checklist_data: state })
         .eq("id", diagnosticId);
+      if (!err) {
+        await syncChecklistPartsToDb(vehicleId, diagnosticId, state);
+        const { data: diag } = await supabase
+          .from("diagnostics")
+          .select("mechanic_id")
+          .eq("id", diagnosticId)
+          .single();
+        if (diag?.mechanic_id) {
+          await syncChecklistToReportedIssues(vehicleId, diag.mechanic_id, state);
+        }
+        setSavedAt(new Date());
+      }
       setSaving(false);
-      if (!err) setSavedAt(new Date());
     },
-    [diagnosticId]
+    [diagnosticId, vehicleId]
   );
 
   function handleChecklistChange(next: ChecklistState) {
@@ -124,6 +142,7 @@ export default function ReconditioningChecklistPage() {
     }
 
     await persistChecklist(checklistRef.current);
+    await syncChecklistPartsToDb(vehicleId, diagnosticId, checklistRef.current);
 
     await supabase
       .from("diagnostics")
@@ -224,6 +243,8 @@ export default function ReconditioningChecklistPage() {
       <ReconditioningChecklist
         state={checklist}
         onChange={handleChecklistChange}
+        enableIssues
+        issuePhotoPrefix={`${vehicleId}/${diagnosticId ?? "new"}`}
       />
 
       <div className="card-padded mt-6 space-y-5">

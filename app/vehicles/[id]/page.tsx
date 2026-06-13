@@ -7,7 +7,7 @@ import { LoadingPage } from "@/components/LoadingPage";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { STATUS_LABELS, TIMELINE_LABELS } from "@/lib/constants";
-import { SECRETARY_NAV } from "@/lib/secretary";
+import { navForRole } from "@/lib/role-nav";
 import { getPublicUrl, supabase } from "@/lib/supabase";
 import type { SessionUser, Vehicle, VehicleStatus } from "@/lib/types";
 
@@ -27,23 +27,10 @@ function timelineLabel(entry: TimelineEntry): string {
   return TIMELINE_LABELS[entry.action] ?? entry.action;
 }
 
-function navForRole(user: SessionUser, vehicle: Vehicle) {
-  if (user.role === "secretary") {
-    return [
-      ...SECRETARY_NAV,
-      { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
-    ];
-  }
-  if (user.role === "seller") {
-    return [
-      { href: "/vehicles/ready-sale", label: "Préparation vente" },
-      { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
-    ];
-  }
-  return [
-    { href: "/dashboard", label: "Tableau de bord" },
+function navForVehicle(user: SessionUser, vehicle: Vehicle) {
+  return navForRole(user.role, [
     { href: `/vehicles/${vehicle.id}`, label: vehicle.license_plate },
-  ];
+  ]);
 }
 
 export default function VehicleDetailPage() {
@@ -114,7 +101,7 @@ export default function VehicleDetailPage() {
   if (!user || !vehicle) return <LoadingPage />;
 
   return (
-    <AppShell user={user} nav={navForRole(user, vehicle)}>
+    <AppShell user={user} nav={navForVehicle(user, vehicle)}>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="page-title">{vehicle.license_plate}</h1>

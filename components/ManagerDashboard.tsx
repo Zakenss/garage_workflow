@@ -19,8 +19,10 @@ import { VEI_STATUS_LABELS } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import {
   fetchAllWorkshopVehicles,
+  fetchRepairCompleteVehicles,
   fetchWaitingVehicles,
 } from "@/lib/workshop-vehicles";
+import { fetchAllVehiclePartCosts, formatEuro, grandTotal } from "@/lib/parts-costs";
 import type { SessionUser, User, Vehicle } from "@/lib/types";
 
 type VeiAlert = {
@@ -45,6 +47,8 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
   const [mechanics, setMechanics] = useState<User[]>([]);
   const [veiAlerts, setVeiAlerts] = useState<VeiAlert[]>([]);
   const [veiToSchedule, setVeiToSchedule] = useState(0);
+  const [completed, setCompleted] = useState<VehicleWithMechanic[]>([]);
+  const [partsCostLabel, setPartsCostLabel] = useState("0 €");
   const [busySlot, setBusySlot] = useState<number | null>(null);
   const [busyVeiId, setBusyVeiId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +64,7 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
     const workshopData = await fetchAllWorkshopVehicles();
     setInWorkshop(workshopData);
     setWaiting(await fetchWaitingVehicles());
+    setCompleted(await fetchRepairCompleteVehicles());
 
     const { data: mechanicsData } = await supabase
       .from("users")
@@ -81,6 +86,10 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
       .select("*", { count: "exact", head: true })
       .eq("status", "to_schedule");
     setVeiToSchedule(toSchedule ?? 0);
+
+    const costGroups = await fetchAllVehiclePartCosts();
+    setPartsCostLabel(formatEuro(grandTotal(costGroups)));
+
     setLoading(false);
   }
 
@@ -140,7 +149,7 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
         subtitle="Réception et suivi atelier"
       />
 
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard
           label="À assigner"
           value={waiting.length}
@@ -152,6 +161,13 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
           value={inWorkshop.length}
           href="/workshop/in-workshop"
         />
+        <StatCard
+          label="Terminé"
+          value={completed.length}
+          href="/workshop/termine"
+          highlight={completed.length > 0}
+        />
+        <StatCard label="Coûts pièces" value={partsCostLabel} href="/parts/costs" />
         <StatCard label="Arrivés" value={arrived.length} href="/workshop/reception" />
         <StatCard
           label="VEI à planifier"
@@ -292,6 +308,46 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
 
           <section>
             <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="section-title">
+                Terminé — réparés par mécanicien ({completed.length})
+              </h2>
+              <Link
+                href="/workshop/termine"
+                className="text-sm text-slate-600 hover:text-slate-900"
+              >
+                Voir tout →
+              </Link>
+            </div>
+            {completed.length === 0 ? (
+              <EmptyState title="Aucun véhicule terminé par un mécanicien" />
+            ) : (
+              <div className="space-y-2">
+                {completed.slice(0, 5).map((v) => (
+                  <Link
+                    key={v.id}
+                    href={`/workshop/vehicle/${v.id}`}
+                    className="card-interactive flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold">{v.license_plate}</p>
+                      <p className="text-sm text-slate-600">
+                        {v.make} {v.model}
+                      </p>
+                      {v.mechanic && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Mécan. {v.mechanic.mechanic_slot} — {v.mechanic.full_name}
+                        </p>
+                      )}
+                    </div>
+                    <StatusBadge status={v.status} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="section-title">Alertes VEI</h2>
               <Link href="/workshop/vei" className="text-sm text-slate-600 hover:text-slate-900">
                 Liste VEI →
@@ -340,11 +396,13 @@ function StatCard({
   value,
   href,
   highlight,
+  suffix,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   href: string;
   highlight?: boolean;
+  suffix?: string;
 }) {
   return (
     <Link
@@ -353,7 +411,10 @@ function StatCard({
         highlight ? "border-amber-300 bg-amber-50" : "bg-white"
       }`}
     >
-      <p className="text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="text-2xl font-bold tracking-tight text-slate-900">
+        {value}
+        {suffix}
+      </p>
       <p className="mt-1 text-xs font-medium text-slate-600">{label}</p>
     </Link>
   );

@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { ReconditioningChecklist } from "@/components/ReconditioningChecklist";
-import { VehicleMechanicWorkCard } from "@/components/MechanicWorkPanel";
+import { ReportedIssuesPanel } from "@/components/ReportedIssuesPanel";
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
-import { fetchVehicleMechanicWork } from "@/lib/mechanic-work";
+import {
+  fetchVehicleIssues,
+  loadVehicleIssuesWithSync,
+  submitStorekeeperChecklist,
+  type MechanicReportedIssue,
+} from "@/lib/mechanic-issues";
 import {
   createDefaultStorekeeperChecklist,
   parseStorekeeperChecklistState,
@@ -24,14 +30,13 @@ export default function StorekeeperChecklistPage() {
   const [checklist, setChecklist] = useState<ChecklistState>(
     createDefaultStorekeeperChecklist()
   );
-  const [mechanicWork, setMechanicWork] = useState<Awaited<
-    ReturnType<typeof fetchVehicleMechanicWork>
-  > | null>(null);
+  const [issues, setIssues] = useState<MechanicReportedIssue[]>([]);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const checklistRef = useRef(checklist);
-  checklistRef.current = checklist;
 
   useEffect(() => {
     fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
@@ -40,30 +45,21 @@ export default function StorekeeperChecklistPage() {
   async function loadChecklistRecord() {
     const { data } = await supabase
       .from("storekeeper_checklists")
-      .select("id, checklist_data")
+      .select("id, checklist_data, submitted_at")
       .eq("vehicle_id", vehicleId)
       .maybeSingle();
 
     if (data) {
       setChecklist(parseStorekeeperChecklistState(data.checklist_data));
-      return data.id as string;
+      setSubmittedAt(data.submitted_at ?? null);
+      return;
     }
 
-    const { data: created, error } = await supabase
-      .from("storekeeper_checklists")
-      .insert({
-        vehicle_id: vehicleId,
-        checklist_data: createDefaultStorekeeperChecklist(),
-        updated_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      setChecklist(createDefaultStorekeeperChecklist());
-      return null;
-    }
-    return created!.id as string;
+    await supabase.from("storekeeper_checklists").insert({
+      vehicle_id: vehicleId,
+      checklist_data: createDefaultStorekeeperChecklist(),
+      updated_by: user?.id ?? null,
+    });
   }
 
   useEffect(() => {
@@ -74,8 +70,14 @@ export default function StorekeeperChecklistPage() {
         .eq("id", vehicleId)
         .single();
       setVehicle(v as Vehicle);
-      setMechanicWork(await fetchVehicleMechanicWork(vehicleId));
-      if (user) await loadChecklistRecord();
+      if (user) {
+        await loadChecklistRecord();
+        setIssues(
+          await loadVehicleIssuesWithSync(vehicleId, user.id).catch(() =>
+            fetchVehicleIssues(vehicleId)
+          )
+        );
+      }
     }
     if (user) init();
   }, [user, vehicleId]);
@@ -102,6 +104,17 @@ export default function StorekeeperChecklistPage() {
     setChecklist(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => persistChecklist(next), 800);
+  }
+
+  async function handleSubmit() {
+    if (!user) return;
+    setSubmitting(true);
+    setSubmitSuccess(false);
+    await persistChecklist(checklist);
+    await submitStorekeeperChecklist(vehicleId, user.id);
+    setSubmittedAt(new Date().toISOString());
+    setSubmitSuccess(true);
+    setSubmitting(false);
   }
 
   useEffect(() => {
@@ -131,31 +144,45 @@ export default function StorekeeperChecklistPage() {
           Check-list magasinier — {vehicle.license_plate}
         </h1>
         <p className="page-subtitle">
-          Analyse du rapport mécanicien · {vehicle.make} {vehicle.model}
+          {vehicle.make} {vehicle.model}
           {saving && " · Enregistrement…"}
           {!saving && savedAt && (
             <> · Sauvegardé à {savedAt.toLocaleTimeString("fr-FR")}</>
           )}
+          {submittedAt && (
+            <> · Soumis le {new Date(submittedAt).toLocaleString("fr-FR")}</>
+          )}
         </p>
       </div>
 
-      {mechanicWork &&
-        (mechanicWork.parts.length > 0 || mechanicWork.photoUrls.length > 0) && (
-          <section className="mb-6">
-            <h2 className="section-title mb-3">Rapport mécanicien (référence)</h2>
-            <VehicleMechanicWorkCard
-              licensePlate={vehicle.license_plate}
-              make={vehicle.make}
-              model={vehicle.model}
-              status={vehicle.status}
-              parts={mechanicWork.parts}
-              photoUrls={mechanicWork.photoUrls}
-              defaultOpen
-            />
-          </section>
-        )}
+      <section className="mb-8">
+        <h2 className="section-title mb-4">
+          Problèmes signalés par le mécanicien (photos)
+        </h2>
+        <ReportedIssuesPanel issues={issues} />
+      </section>
 
       <ReconditioningChecklist state={checklist} onChange={handleChecklistChange} />
+
+      <div className="card-padded mt-8 space-y-4">
+        {submitSuccess && (
+          <Alert variant="success">
+            Check-list soumise — le chef d&apos;atelier a été notifié.
+          </Alert>
+        )}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting || Boolean(submittedAt)}
+          className="btn-success w-full !min-h-12"
+        >
+          {submittedAt
+            ? "Check-list déjà soumise"
+            : submitting
+              ? "Soumission…"
+              : "Soumettre la check-list magasinier"}
+        </button>
+      </div>
     </AppShell>
   );
 }

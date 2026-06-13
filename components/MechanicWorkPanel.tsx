@@ -1,14 +1,7 @@
 import { StatusBadge } from "@/components/StatusBadge";
 import type { MechanicPartRow } from "@/lib/mechanic-work";
 
-const PART_STATUS_LABELS: Record<string, string> = {
-  in_stock: "En stock",
-  to_order: "À commander",
-  ordered: "Commandée",
-  received: "Reçue",
-};
-
-const PART_STATUSES = ["in_stock", "to_order", "ordered", "received"] as const;
+import { PART_STATUS_LABELS, PART_STATUSES } from "@/lib/constants";
 
 export function MechanicWorkPanel({
   parts,
@@ -43,6 +36,11 @@ export function MechanicWorkPanel({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium text-slate-900">{p.part_name}</p>
+                    {p.problem && (
+                      <p className="mt-1 text-sm text-amber-800">
+                        Problème : {p.problem}
+                      </p>
+                    )}
                     <p className="text-sm text-slate-500">Qté {p.quantity}</p>
                   </div>
                   {!canEditStatus && (
@@ -51,7 +49,7 @@ export function MechanicWorkPanel({
                     </span>
                   )}
                 </div>
-                {canEditStatus && onStatusChange && (
+                {canEditStatus && onStatusChange && !p.id.startsWith("checklist-") && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {PART_STATUSES.map((s) => (
                       <button

@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { VehicleCard } from "@/components/VehicleCard";
+import { MECHANIC_NAV } from "@/lib/role-nav";
 import { supabase } from "@/lib/supabase";
 import type { SessionUser, Vehicle } from "@/lib/types";
 
@@ -45,7 +46,7 @@ export default function MyVehiclesPage() {
   return (
     <AppShell
       user={user}
-      nav={[{ href: "/vehicles/my", label: "Mes véhicules" }]}
+      nav={[...MECHANIC_NAV]}
     >
       <PageHeader
         title="Mes véhicules"

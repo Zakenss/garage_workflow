@@ -79,6 +79,8 @@ export default function DashboardPage() {
       user={user}
       nav={[
         { href: "/dashboard", label: "Tableau de bord" },
+        { href: "/dashboard/supervision", label: "Supervision atelier" },
+        { href: "/parts/costs", label: "Coûts pièces" },
         { href: "/users", label: "Utilisateurs" },
       ]}
     >
@@ -87,6 +89,19 @@ export default function DashboardPage() {
         subtitle="Vue globale du parc"
         action={<NotificationsBell user={user} />}
       />
+
+      <Link
+        href="/dashboard/supervision"
+        className="card-interactive mb-6 flex flex-col gap-1 border-indigo-200 bg-indigo-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <p className="font-semibold text-indigo-950">Supervision atelier</p>
+          <p className="text-sm text-indigo-800">
+            Problèmes, pièces, horaires de réparation — vue complète en temps réel
+          </p>
+        </div>
+        <span className="text-sm font-medium text-indigo-700">Ouvrir →</span>
+      </Link>
 
       <input
         placeholder="Rechercher immatriculation, marque…"

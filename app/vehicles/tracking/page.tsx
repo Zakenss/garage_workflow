@@ -8,7 +8,7 @@ import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
-import { SECRETARY_NAV } from "@/lib/secretary";
+import { navForRole } from "@/lib/role-nav";
 import { supabase } from "@/lib/supabase";
 import type { SessionUser, Vehicle } from "@/lib/types";
 
@@ -58,7 +58,7 @@ export default function SecretaryTrackingPage() {
   );
 
   return (
-    <AppShell user={user} nav={[...SECRETARY_NAV]}>
+    <AppShell user={user} nav={navForRole(user.role)}>
       <PageHeader
         title="Suivi des véhicules"
         subtitle="Avancement de l'arrivée jusqu'à la vente"

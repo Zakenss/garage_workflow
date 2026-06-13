@@ -1,7 +1,15 @@
+export type ChecklistItemIssue = {
+  problem: string;
+  photoPaths: string[];
+  partsNeeded: string;
+  updatedAt?: string;
+};
+
 export type ChecklistItem = {
   id: string;
   label: string;
   checked: boolean;
+  issue?: ChecklistItemIssue;
 };
 
 export type ChecklistGroup = {
@@ -602,6 +610,36 @@ export function deleteChecklistItem(
               grp.id !== groupId
                 ? grp
                 : { ...grp, items: grp.items.filter((it) => it.id !== itemId) }
+            ),
+          }
+    ),
+  };
+}
+
+export function updateChecklistItemIssue(
+  state: ChecklistState,
+  sectionId: string,
+  groupId: string,
+  itemId: string,
+  issue: ChecklistItemIssue | undefined
+): ChecklistState {
+  return {
+    sections: state.sections.map((sec) =>
+      sec.id !== sectionId
+        ? sec
+        : {
+            ...sec,
+            groups: sec.groups.map((grp) =>
+              grp.id !== groupId
+                ? grp
+                : {
+                    ...grp,
+                    items: grp.items.map((it) =>
+                      it.id === itemId
+                        ? { ...it, issue: issue ?? undefined }
+                        : it
+                    ),
+                  }
             ),
           }
     ),

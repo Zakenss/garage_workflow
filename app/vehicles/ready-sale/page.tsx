@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
+import { SELLER_NAV } from "@/lib/role-nav";
 import type { SessionUser, Vehicle } from "@/lib/types";
 
 export default function ReadySalePage() {
@@ -92,7 +93,7 @@ export default function ReadySalePage() {
   return (
     <AppShell
       user={user}
-      nav={[{ href: "/vehicles/ready-sale", label: "Préparation vente" }]}
+      nav={[...SELLER_NAV]}
     >
       <PageHeader
         title="Préparation vente"

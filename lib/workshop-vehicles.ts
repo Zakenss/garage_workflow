@@ -1,6 +1,7 @@
 import {
   WORKSHOP_ACTIVE_STATUSES,
   WORKSHOP_ASSIGNED_STATUSES,
+  WORKSHOP_REPAIR_COMPLETE_STATUS,
   WORKSHOP_WAITING_STATUS,
 } from "./manager";
 import { supabase } from "./supabase";
@@ -77,6 +78,20 @@ export async function fetchAllWorkshopVehicles(): Promise<VehicleWithMechanic[]>
     return [];
   }
   return sortByDispatchPriority((data as VehicleWithMechanic[]) ?? []);
+}
+
+export async function fetchRepairCompleteVehicles(): Promise<VehicleWithMechanic[]> {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*, mechanic:users!assigned_mechanic_id(id, full_name, mechanic_slot)")
+    .eq("status", WORKSHOP_REPAIR_COMPLETE_STATUS)
+    .order("repair_completed_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchRepairCompleteVehicles:", error.message);
+    return [];
+  }
+  return (data as VehicleWithMechanic[]) ?? [];
 }
 
 export async function fetchAssignmentHistory(
