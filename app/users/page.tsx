@@ -1,12 +1,14 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { ROLE_LABELS } from "@/lib/constants";
-import type { SessionUser, User, UserRole } from "@/lib/types";
+import type { User, UserRole } from "@/lib/types";
 
 const ROLES: UserRole[] = [
   "secretary",
@@ -19,7 +21,7 @@ const ROLES: UserRole[] = [
 ];
 
 export default function UsersPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [form, setForm] = useState({
     full_name: "",
@@ -29,10 +31,6 @@ export default function UsersPage() {
     mechanic_slot: "",
   });
   const [editing, setEditing] = useState<User | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data } = await supabase

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
@@ -10,30 +9,15 @@ import { ManagerDashboard } from "@/components/ManagerDashboard";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { useSession } from "@/lib/session-context";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session")
-      .then((r) => {
-        if (!r.ok) {
-          router.replace("/login?from=/dashboard");
-          return null;
-        }
-        return r.json();
-      })
-      .then((d) => {
-        if (d?.user) setUser(d.user);
-      })
-      .catch(() => router.replace("/login?from=/dashboard"));
-  }, [router]);
 
   async function load() {
     const { data } = await supabase.from("vehicles").select("*").order("updated_at", {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
@@ -17,12 +19,12 @@ import {
 } from "@/lib/reconditioning-checklist";
 import { syncChecklistPartsToDb } from "@/lib/sync-checklist-parts";
 import { syncChecklistToReportedIssues } from "@/lib/mechanic-issues";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function ReconditioningChecklistPage() {
   const { id: vehicleId } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [diagnosticId, setDiagnosticId] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<ChecklistState>(createDefaultChecklist());
@@ -35,10 +37,6 @@ export default function ReconditioningChecklistPage() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const checklistRef = useRef(checklist);
   checklistRef.current = checklist;
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function ensureDiagnostic(mechanicId: string) {
     const { data: existing } = await supabase

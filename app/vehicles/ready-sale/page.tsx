@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
@@ -10,20 +12,16 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import { SELLER_NAV } from "@/lib/role-nav";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function ReadySalePage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [expert, setExpert] = useState({ name: "", date: "", time: "" });
   const [saleNotes, setSaleNotes] = useState("");
   const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data } = await supabase

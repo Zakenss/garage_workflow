@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -9,7 +11,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle, VehicleStatus } from "@/lib/types";
+import type { Vehicle, VehicleStatus } from "@/lib/types";
 
 const STOREKEEPER_VEHICLE_STATUSES: VehicleStatus[] = [
   "diagnostic_complete",
@@ -20,13 +22,9 @@ const STOREKEEPER_VEHICLE_STATUSES: VehicleStatus[] = [
 ];
 
 export default function StorekeeperChecklistListPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data } = await supabase

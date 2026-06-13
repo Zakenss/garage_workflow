@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
@@ -10,19 +12,15 @@ import { MECHANIC_SLOTS, saveMechanicQueueOrder } from "@/lib/manager-actions";
 import { MANAGER_NAV } from "@/lib/manager";
 import { supabase } from "@/lib/supabase";
 import { fetchAssignedVehicles, type VehicleWithMechanic } from "@/lib/workshop-vehicles";
-import type { SessionUser, User } from "@/lib/types";
+import type { User } from "@/lib/types";
 
 export default function MechanicQueuePage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [mechanics, setMechanics] = useState<User[]>([]);
   const [assigned, setAssigned] = useState<VehicleWithMechanic[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const [assignedList, mechanicsRes] = await Promise.all([

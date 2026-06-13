@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 type Quote = {
   id: string;
@@ -20,14 +22,10 @@ type Quote = {
 export default function ValidationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [decisions, setDecisions] = useState<Record<string, "repair" | "replace">>({});
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   useEffect(() => {
     async function load() {

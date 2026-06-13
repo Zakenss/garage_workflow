@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
@@ -7,12 +9,12 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { supabase } from "@/lib/supabase";
 import { notifyRole, updateVehicleStatus } from "@/lib/db";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function FinalValidationPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [checklist, setChecklist] = useState({
     mechanics_done: false,
@@ -22,10 +24,6 @@ export default function FinalValidationPage() {
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   useEffect(() => {
     supabase

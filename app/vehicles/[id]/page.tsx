@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -35,15 +37,11 @@ function navForVehicle(user: SessionUser, vehicle: Vehicle) {
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [mechanicName, setMechanicName] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   useEffect(() => {
     async function load() {

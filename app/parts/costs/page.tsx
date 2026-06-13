@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
@@ -14,16 +16,11 @@ import {
   type VehiclePartsCost,
 } from "@/lib/parts-costs";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser } from "@/lib/types";
 
 export default function PartsCostsPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [groups, setGroups] = useState<VehiclePartsCost[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     setGroups(await fetchAllVehiclePartCosts());

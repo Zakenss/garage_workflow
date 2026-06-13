@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -20,11 +22,11 @@ import {
 } from "@/lib/followup-repair";
 import { createFollowupIssue } from "@/lib/mechanic-issues";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function FollowupVehiclePage() {
   const { id: vehicleId } = useParams<{ id: string }>();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [issues, setIssues] = useState<IssueWithPart[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -32,10 +34,6 @@ export default function FollowupVehiclePage() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data: v } = await supabase

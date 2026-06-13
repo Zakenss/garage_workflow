@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -10,17 +12,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { navForRole } from "@/lib/role-nav";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function SecretaryTrackingPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data } = await supabase

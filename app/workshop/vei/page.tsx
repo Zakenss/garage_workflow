@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -12,7 +14,7 @@ import { VEI_STATUS_LABELS } from "@/lib/constants";
 import { updateVeiStatus, type VeiStatus } from "@/lib/manager-actions";
 import { MANAGER_NAV } from "@/lib/manager";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, VehicleStatus } from "@/lib/types";
+import type { VehicleStatus } from "@/lib/types";
 
 type VeiRow = {
   id: string;
@@ -31,15 +33,11 @@ type VeiRow = {
 };
 
 export default function VeiListPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [rows, setRows] = useState<VeiRow[]>([]);
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     let query = supabase

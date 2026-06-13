@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -21,11 +23,11 @@ import {
   type ChecklistState,
 } from "@/lib/storekeeper-checklist";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, Vehicle } from "@/lib/types";
+import type { Vehicle } from "@/lib/types";
 
 export default function StorekeeperChecklistPage() {
   const { id: vehicleId } = useParams<{ id: string }>();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [checklist, setChecklist] = useState<ChecklistState>(
     createDefaultStorekeeperChecklist()
@@ -37,10 +39,6 @@ export default function StorekeeperChecklistPage() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function loadChecklistRecord() {
     const { data } = await supabase

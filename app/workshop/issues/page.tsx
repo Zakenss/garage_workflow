@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
@@ -14,17 +16,12 @@ import {
   type MechanicReportedIssue,
 } from "@/lib/mechanic-issues";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser } from "@/lib/types";
 
 export default function ManagerIssuesPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [issues, setIssues] = useState<MechanicReportedIssue[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     setIssues(await fetchPendingIssues());

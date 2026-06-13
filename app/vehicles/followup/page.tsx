@@ -1,25 +1,22 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { MECHANIC_NAV } from "@/lib/role-nav";
 import { findVehicleByPlate } from "@/lib/mechanic-issues";
-import type { SessionUser } from "@/lib/types";
 
 export default function FollowupSearchPage() {
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [plate, setPlate] = useState("");
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();

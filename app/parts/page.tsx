@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -23,20 +25,15 @@ import {
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
 import { supabase } from "@/lib/supabase";
 import { notifyUser } from "@/lib/db";
-import type { SessionUser } from "@/lib/types";
 
 export default function PartsPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [issueGroups, setIssueGroups] = useState<VehicleIssuesGroup[]>([]);
   const [costGroups, setCostGroups] = useState<VehiclePartsCost[]>([]);
   const [loading, setLoading] = useState(true);
 
   const isStorekeeper = user?.role === "storekeeper";
   const isManager = user?.role === "workshop_manager";
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const [groups, costs] = await Promise.all([

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
@@ -18,7 +20,7 @@ import { fetchVehicleMechanicWork } from "@/lib/mechanic-work";
 import { MANAGER_NAV } from "@/lib/manager";
 import { STATUS_LABELS, TIMELINE_LABELS } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser, User, Vehicle, VehicleStatus } from "@/lib/types";
+import type { User, Vehicle, VehicleStatus } from "@/lib/types";
 
 import type { MechanicPartRow } from "@/lib/mechanic-work";
 
@@ -41,17 +43,13 @@ function timelineLabel(entry: TimelineEntry): string {
 export default function WorkshopVehiclePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [mechanics, setMechanics] = useState<User[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [parts, setParts] = useState<MechanicPartRow[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [busySlot, setBusySlot] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data: v } = await supabase.from("vehicles").select("*").eq("id", id).single();

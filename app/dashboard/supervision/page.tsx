@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
@@ -11,7 +13,6 @@ import { PART_STATUS_LABELS } from "@/lib/constants";
 import { MANAGER_NAV } from "@/lib/manager";
 import { formatEuro } from "@/lib/parts-costs";
 import { supabase } from "@/lib/supabase";
-import type { SessionUser } from "@/lib/types";
 import {
   REPAIR_STATE_LABELS,
   fetchWorkshopSupervision,
@@ -28,13 +29,9 @@ const ADMIN_NAV = [
 ];
 
 export default function SupervisionPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [rows, setRows] = useState<SupervisionVehicle[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     setRows(await fetchWorkshopSupervision());

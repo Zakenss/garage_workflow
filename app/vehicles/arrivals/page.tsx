@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSession } from "@/lib/session-context";
+
+import { useState } from "react";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
@@ -8,10 +10,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { addTimeline, notifyRole } from "@/lib/db";
 import { SECRETARY_NAV } from "@/lib/secretary";
-import type { SessionUser } from "@/lib/types";
 
 export default function ArrivalsPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [form, setForm] = useState({
     license_plate: "",
     make: "",
@@ -26,10 +27,6 @@ export default function ArrivalsPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

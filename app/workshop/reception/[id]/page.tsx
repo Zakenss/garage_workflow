@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
@@ -14,12 +16,12 @@ import { assignVehicleToMechanic, updateVeiStatus, type VeiStatus } from "@/lib/
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import { VEI_STATUS_LABELS } from "@/lib/constants";
-import type { SessionUser, User, Vehicle } from "@/lib/types";
+import type { User, Vehicle } from "@/lib/types";
 
 export default function ReceptionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [photoCount, setPhotoCount] = useState(0);
   const [vin, setVin] = useState("");
@@ -39,10 +41,6 @@ export default function ReceptionDetailPage() {
   } | null>(null);
   const [mechanics, setMechanics] = useState<User[]>([]);
   const [assigning, setAssigning] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const { data: v } = await supabase.from("vehicles").select("*").eq("id", id).single();

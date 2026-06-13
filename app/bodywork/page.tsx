@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
@@ -9,7 +11,6 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import { BODYWORKER_NAV } from "@/lib/role-nav";
-import type { SessionUser } from "@/lib/types";
 
 type BodyworkRow = {
   id: string;
@@ -20,15 +21,11 @@ type BodyworkRow = {
 };
 
 export default function BodyworkPage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [items, setItems] = useState<BodyworkRow[]>([]);
   const [selected, setSelected] = useState<BodyworkRow | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     if (!user) return;

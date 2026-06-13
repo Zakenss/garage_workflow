@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
@@ -13,16 +15,11 @@ import {
   fetchRepairCompleteVehicles,
   type VehicleWithMechanic,
 } from "@/lib/workshop-vehicles";
-import type { SessionUser } from "@/lib/types";
 
 export default function TerminePage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [vehicles, setVehicles] = useState<VehicleWithMechanic[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     setVehicles(await fetchRepairCompleteVehicles());

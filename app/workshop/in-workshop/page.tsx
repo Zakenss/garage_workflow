@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/session-context";
+
 import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -27,7 +29,7 @@ import {
   type AssignmentHistoryRow,
   type VehicleWithMechanic,
 } from "@/lib/workshop-vehicles";
-import type { SessionUser, User, Vehicle } from "@/lib/types";
+import type { User, Vehicle } from "@/lib/types";
 
 type Tab = "assign" | "active" | "mechanics" | "history";
 
@@ -51,7 +53,7 @@ function InWorkshopContent() {
   const newVehicleId = searchParams.get("new");
   const initialTab = (searchParams.get("tab") as Tab) || "assign";
 
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const user = useSession();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [waiting, setWaiting] = useState<Vehicle[]>([]);
   const [assigned, setAssigned] = useState<VehicleWithMechanic[]>([]);
@@ -61,10 +63,6 @@ function InWorkshopContent() {
   const [loading, setLoading] = useState(true);
   const [justSentPlate, setJustSentPlate] = useState<string | null>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((d) => setUser(d.user));
-  }, []);
 
   async function load() {
     const [waitingList, assignedList, historyList, mechanicsRes] = await Promise.all([
