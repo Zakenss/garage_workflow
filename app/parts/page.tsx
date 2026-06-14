@@ -1,51 +1,51 @@
 "use client";
 
-import { useSession } from "@/lib/session-context";
-
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  PartPricingEditor,
-  VehicleCostSummary,
-} from "@/components/PartPricingEditor";
+import { PartPricingEditor } from "@/components/PartPricingEditor";
+import { PartStatusPicker } from "@/components/PartStatusPicker";
 import { ReportedIssuesPanel } from "@/components/ReportedIssuesPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PART_STATUS_LABELS } from "@/lib/constants";
 import { MANAGER_NAV } from "@/lib/manager";
-import { fetchAllIssuesGrouped, type VehicleIssuesGroup } from "@/lib/mechanic-issues";
 import {
-  fetchAllVehiclePartCosts,
-  formatEuro,
-  type VehiclePartsCost,
-} from "@/lib/parts-costs";
+  fetchPhotosEtProblemesVehicles,
+  type PhotosEtProblemesVehicle,
+} from "@/lib/photos-et-problemes";
+import {
+  PARTS_SUMMARY_LABELS,
+  summarizeVehicleParts,
+  updatePartOrderStatus,
+} from "@/lib/parts-orders";
+import { formatEuro } from "@/lib/parts-costs";
+import { ADMIN_NAV } from "@/lib/role-nav";
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
+import { useSession } from "@/lib/session-context";
 import { supabase } from "@/lib/supabase";
-import { notifyUser } from "@/lib/db";
 
 export default function PartsPage() {
   const user = useSession();
-  const [issueGroups, setIssueGroups] = useState<VehicleIssuesGroup[]>([]);
-  const [costGroups, setCostGroups] = useState<VehiclePartsCost[]>([]);
+  const [rows, setRows] = useState<PhotosEtProblemesVehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [busyPartId, setBusyPartId] = useState<string | null>(null);
 
   const isStorekeeper = user?.role === "storekeeper";
   const isManager = user?.role === "workshop_manager";
+  const isAdmin = user?.role === "admin";
 
   async function load() {
-    const [groups, costs] = await Promise.all([
-      fetchAllIssuesGrouped(),
-      fetchAllVehiclePartCosts(),
-    ]);
-    setIssueGroups(groups);
-    setCostGroups(costs);
+    if (!user) return;
+    setRows(await fetchPhotosEtProblemesVehicles());
     setLoading(false);
   }
 
   useEffect(() => {
+    if (!user) return;
     load();
     const ch = supabase
       .channel("parts-work")
@@ -57,58 +57,89 @@ export default function PartsPage() {
         { event: "*", schema: "public", table: "mechanic_reported_issues" },
         () => load()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "diagnostics" },
+        () => load()
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
-  }, []);
+  }, [user?.id, user?.role]);
 
-  async function setPartStatus(vehicleId: string, partId: string, status: string) {
-    await supabase.from("parts").update({ status }).eq("id", partId);
-    if (status === "received") {
-      const { data: v } = await supabase
-        .from("vehicles")
-        .select("assigned_mechanic_id, license_plate")
-        .eq("id", vehicleId)
-        .single();
-      if (v?.assigned_mechanic_id) {
-        await notifyUser(
-          v.assigned_mechanic_id,
-          "parts_received",
-          `Pièces reçues — ${v.license_plate}`,
-          vehicleId
-        );
-      }
+  async function setPartStatus(partId: string, status: string) {
+    setBusyPartId(partId);
+    try {
+      await updatePartOrderStatus(partId, status);
+      await load();
+    } finally {
+      setBusyPartId(null);
     }
-    await load();
   }
 
   if (!user) return <LoadingPage />;
 
-  const nav = isManager ? [...MANAGER_NAV] : [...STOREKEEPER_NAV];
+  const nav = isAdmin
+    ? [...ADMIN_NAV]
+    : isManager
+      ? [...MANAGER_NAV]
+      : [...STOREKEEPER_NAV];
 
-  const vehicleIds = new Set([
-    ...issueGroups.map((g) => g.vehicle.id),
-    ...costGroups.map((g) => g.vehicle.id),
-  ]);
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? rows.filter(
+        (row) =>
+          row.vehicle.license_plate.toLowerCase().includes(query) ||
+          row.vehicle.make.toLowerCase().includes(query) ||
+          row.vehicle.model.toLowerCase().includes(query)
+      )
+    : rows;
 
   return (
     <AppShell user={user} nav={nav}>
       <PageHeader
-        title="Pièces & signalements mécanicien"
+        title="Photos et problèmes"
         subtitle={
           isStorekeeper
-            ? "Renseignez fournisseur et prix — totaux visibles par le chef d'atelier"
-            : "Problèmes et coûts pièces par véhicule"
-        }
-        action={
-          isManager ? (
-            <Link href="/parts/costs" className="btn-secondary text-sm">
-              Voir tous les coûts →
-            </Link>
-          ) : undefined
+            ? "Signalements mécanicien — commandez les pièces puis suivez les statuts"
+            : "Check-list initiale — chaque « ! » indique un point examiné avec problème, photo et pièce"
         }
       />
+
+      {isStorekeeper && (
+        <p className="mb-4 text-sm text-slate-600">
+          Vue détaillée des statuts aussi sur{" "}
+          <Link href="/parts/orders" className="font-medium text-slate-900 underline">
+            Commandes pièces
+          </Link>
+          .
+        </p>
+      )}
+
+      {isManager && (
+        <p className="mb-4 text-sm text-slate-600">
+          Les pièces oubliées après réception sont validées sur{" "}
+          <a href="/workshop/issues" className="font-medium text-slate-900 underline">
+            Signalements
+          </a>
+          .
+        </p>
+      )}
+
+      {isStorekeeper && (
+        <label className="mb-6 block">
+          <span className="sr-only">Rechercher par immatriculation</span>
+          <input
+            type="search"
+            className="input-field"
+            placeholder="Rechercher par immatriculation, marque…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Rechercher par immatriculation"
+          />
+        </label>
+      )}
 
       {loading ? (
         <div className="space-y-4">
@@ -116,112 +147,246 @@ export default function PartsPage() {
             <div key={i} className="skeleton h-32 rounded-xl" />
           ))}
         </div>
-      ) : vehicleIds.size === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
-          title="Aucun signalement"
-          description="Les pièces signalées par les mécaniciens apparaîtront ici."
+          title={query ? "Aucun véhicule trouvé" : "Aucune check-list soumise"}
+          description={
+            query
+              ? "Essayez une autre immatriculation ou effacez la recherche."
+              : "Après soumission de la check-list initiale, les signalements apparaîtront ici."
+          }
         />
       ) : (
-        <div className="space-y-6">
-          {Array.from(vehicleIds).map((vehicleId) => {
-            const issueGroup = issueGroups.find((g) => g.vehicle.id === vehicleId);
-            const costGroup = costGroups.find((g) => g.vehicle.id === vehicleId);
-            const vehicle = issueGroup?.vehicle ?? costGroup?.vehicle;
-            if (!vehicle) return null;
-
-            return (
-              <section key={vehicleId} className="card-padded space-y-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-lg font-semibold">{vehicle.license_plate}</p>
-                    <p className="text-sm text-slate-600">
-                      {vehicle.make} {vehicle.model}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={vehicle.status} />
-                    {isManager && costGroup && costGroup.totalCost > 0 && (
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-900">
-                        {formatEuro(costGroup.totalCost)}
-                      </span>
-                    )}
-                    {isStorekeeper && (
-                      <Link
-                        href={`/parts/checklist/${vehicleId}`}
-                        className="text-sm font-medium text-slate-700 hover:underline"
-                      >
-                        Check-list →
-                      </Link>
-                    )}
-                  </div>
-                </div>
-
-                {costGroup && costGroup.partsCount > 0 && (
-                  <VehicleCostSummary
-                    totalCost={costGroup.totalCost}
-                    pricedCount={costGroup.pricedCount}
-                    partsCount={costGroup.partsCount}
-                  />
-                )}
-
-                {issueGroup && issueGroup.issues.length > 0 && (
-                  <ReportedIssuesPanel issues={issueGroup.issues} />
-                )}
-
-                {costGroup && costGroup.parts.length > 0 && (
-                  <div className="border-t border-slate-100 pt-4">
-                    <h4 className="mb-3 text-sm font-semibold text-slate-800">
-                      {isStorekeeper
-                        ? "Pièces — fournisseur & prix"
-                        : "Détail des pièces"}
-                    </h4>
-                    <div className="space-y-3">
-                      {costGroup.parts.map((p) =>
-                        isStorekeeper ? (
-                          <div key={p.id} className="space-y-2">
-                            <PartPricingEditor part={p} onSaved={load} />
-                            <div className="flex flex-wrap gap-2 pl-1">
-                              {(["in_stock", "to_order", "ordered", "received"] as const).map(
-                                (s) => (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    onClick={() => setPartStatus(vehicleId, p.id, s)}
-                                    className={
-                                      p.status === s ? "btn-chip-active" : "btn-chip-inactive"
-                                    }
-                                  >
-                                    {PART_STATUS_LABELS[s]}
-                                  </button>
-                                )
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            key={p.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm"
-                          >
-                            <div>
-                              <p className="font-medium">{p.part_name}</p>
-                              <p className="text-slate-500">
-                                {p.supplier ?? "Fournisseur non renseigné"} · Qté {p.quantity}
-                              </p>
-                            </div>
-                            <p className="font-semibold">
-                              {p.lineTotal > 0 ? formatEuro(p.lineTotal) : "—"}
-                            </p>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-              </section>
-            );
-          })}
+        <div className="space-y-3">
+          {filtered.map((row) =>
+            isStorekeeper ? (
+              <StorekeeperVehicleCard
+                key={row.vehicle.id}
+                row={row}
+                busyPartId={busyPartId}
+                onPartStatusChange={setPartStatus}
+                onPricingSaved={load}
+              />
+            ) : (
+              <StaffVehicleCard key={row.vehicle.id} row={row} isAdmin={isAdmin} />
+            )
+          )}
         </div>
       )}
     </AppShell>
+  );
+}
+
+function StorekeeperVehicleCard({
+  row,
+  busyPartId,
+  onPartStatusChange,
+  onPricingSaved,
+}: {
+  row: PhotosEtProblemesVehicle;
+  busyPartId: string | null;
+  onPartStatusChange: (partId: string, status: string) => void;
+  onPricingSaved: () => void;
+}) {
+  const signalementCount = row.signalements.length;
+  const photoCount = row.signalements.reduce(
+    (n, s) => n + (s.photo_paths?.length ?? 0),
+    0
+  );
+  const partsPhase = summarizeVehicleParts(row.parts);
+  const isCompact = partsPhase === "ordered" || partsPhase === "received";
+
+  return (
+    <details
+      className={`card-padded group ${isCompact ? "!py-3" : ""}`}
+      open={!isCompact && signalementCount <= 3}
+    >
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        {isCompact ? (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <p className="font-semibold text-slate-900">{row.vehicle.license_plate}</p>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  partsPhase === "received"
+                    ? "bg-emerald-100 text-emerald-900"
+                    : "bg-indigo-100 text-indigo-900"
+                }`}
+              >
+                {partsPhase ? PARTS_SUMMARY_LABELS[partsPhase] : ""}
+              </span>
+            </div>
+            <span className="shrink-0 text-xs text-slate-500">Modifier →</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-900">{row.vehicle.license_plate}</p>
+              <p className="text-sm text-slate-600">
+                {row.vehicle.make} {row.vehicle.model}
+                {row.mechanicName && ` · ${row.mechanicName}`}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Check-list soumise le{" "}
+                {new Date(row.submittedAt).toLocaleString("fr-FR")}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <StatusBadge status={row.vehicle.status} />
+              {signalementCount > 0 && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                  {signalementCount} signalement{signalementCount > 1 ? "s" : ""}
+                  {photoCount > 0 && ` · ${photoCount} photo${photoCount > 1 ? "s" : ""}`}
+                </span>
+              )}
+              {row.parts.length > 0 && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                  {PARTS_SUMMARY_LABELS.awaiting_order}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </summary>
+
+      <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+        {isCompact && (
+          <p className="text-sm text-slate-600">
+            {row.vehicle.make} {row.vehicle.model}
+            {row.mechanicName && ` · ${row.mechanicName}`}
+          </p>
+        )}
+
+        {signalementCount > 0 && <ReportedIssuesPanel issues={row.signalements} />}
+
+        {row.parts.length > 0 && (
+          <div className={signalementCount > 0 ? "border-t border-slate-100 pt-4" : undefined}>
+            <h4 className="mb-3 text-sm font-semibold text-slate-800">Détails commande</h4>
+            <div className="space-y-3">
+              {row.parts.map((p) => (
+                <div key={p.id} className="space-y-3 rounded-lg border border-slate-200 p-4">
+                  <p className="font-medium text-slate-900">{p.part_name}</p>
+                  <PartPricingEditor part={p} onSaved={onPricingSaved} />
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-slate-600">Statut</p>
+                    <PartStatusPicker
+                      status={p.status}
+                      disabled={busyPartId === p.id}
+                      onChange={(s) => onPartStatusChange(p.id, s)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function StaffVehicleCard({
+  row,
+  isAdmin,
+}: {
+  row: PhotosEtProblemesVehicle;
+  isAdmin: boolean;
+}) {
+  const signalementCount = row.signalements.length;
+  const photoCount = row.signalements.reduce(
+    (n, s) => n + (s.photo_paths?.length ?? 0),
+    0
+  );
+  const hasSignalements = signalementCount > 0 || row.parts.length > 0;
+
+  return (
+    <details
+      className="card-padded group"
+      open={hasSignalements && signalementCount <= 3}
+    >
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-slate-900">{row.vehicle.license_plate}</p>
+            <p className="text-sm text-slate-600">
+              {row.vehicle.make} {row.vehicle.model}
+              {row.mechanicName && ` · ${row.mechanicName}`}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Check-list soumise le {new Date(row.submittedAt).toLocaleString("fr-FR")}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <StatusBadge status={row.vehicle.status} />
+            {hasSignalements ? (
+              <>
+                {signalementCount > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                    {signalementCount} signalement{signalementCount > 1 ? "s" : ""}
+                    {photoCount > 0 && ` · ${photoCount} photo${photoCount > 1 ? "s" : ""}`}
+                  </span>
+                )}
+                {row.parts.length > 0 && (
+                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">
+                    {row.parts.length} pièce{row.parts.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                Points examinés — rien à signaler
+              </span>
+            )}
+          </div>
+        </div>
+      </summary>
+
+      <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+        {signalementCount > 0 ? (
+          <ReportedIssuesPanel issues={row.signalements} />
+        ) : hasSignalements ? null : (
+          <p className="text-sm text-slate-500">
+            Le mécanicien a coché les points sans signaler de problème via « ! ».
+          </p>
+        )}
+
+        {row.parts.length > 0 && (
+          <div className={signalementCount > 0 ? "border-t border-slate-100 pt-4" : undefined}>
+            <h4 className="mb-3 text-sm font-semibold text-slate-800">Pièces nécessaires</h4>
+            <div className="space-y-3">
+              {row.parts.map((p) =>
+                isAdmin ? (
+                  <div
+                    key={p.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">{p.part_name}</p>
+                      <p className="text-slate-500">
+                        {PART_STATUS_LABELS[p.status] ?? p.status}
+                        {p.supplier && ` · ${p.supplier}`}
+                      </p>
+                    </div>
+                    <p className="font-semibold">
+                      {p.lineTotal > 0 ? formatEuro(p.lineTotal) : "—"}
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm"
+                  >
+                    <p className="font-medium">{p.part_name}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                      {PART_STATUS_LABELS[p.status] ?? p.status}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
   );
 }

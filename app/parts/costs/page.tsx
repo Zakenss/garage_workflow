@@ -1,14 +1,13 @@
 "use client";
 
-import { useSession } from "@/lib/session-context";
-
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { VehicleCostsCard } from "@/components/PartPricingEditor";
-import { MANAGER_NAV } from "@/lib/manager";
+import { ADMIN_NAV, navForRole } from "@/lib/role-nav";
+import { useSession } from "@/lib/session-context";
 import {
   fetchAllVehiclePartCosts,
   formatEuro,
@@ -28,7 +27,7 @@ export default function PartsCostsPage() {
   }
 
   useEffect(() => {
-    load();
+    if (user?.role === "admin") load();
     const ch = supabase
       .channel("parts-costs")
       .on(
@@ -40,23 +39,22 @@ export default function PartsCostsPage() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, []);
+  }, [user?.role]);
 
   if (!user) return <LoadingPage />;
 
-  const isAdmin = user.role === "admin";
-  const nav = isAdmin
-    ? [
-        { href: "/dashboard", label: "Tableau de bord" },
-        { href: "/parts/costs", label: "Coûts pièces" },
-        { href: "/users", label: "Utilisateurs" },
-      ]
-    : [...MANAGER_NAV];
+  if (user.role !== "admin") {
+    return (
+      <AppShell user={user} nav={navForRole(user.role)}>
+        <EmptyState title="Accès réservé à l'administration" />
+      </AppShell>
+    );
+  }
 
   const total = grandTotal(groups);
 
   return (
-    <AppShell user={user} nav={nav}>
+    <AppShell user={user} nav={[...ADMIN_NAV]}>
       <PageHeader
         title="Coûts pièces par véhicule"
         subtitle="Fournisseur et prix saisis par le magasinier — totaux calculés automatiquement"

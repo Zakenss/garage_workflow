@@ -121,7 +121,6 @@ export default function WorkshopVehiclePage() {
       user={user}
       nav={[
         ...MANAGER_NAV,
-        { href: "/workshop/in-workshop", label: "Atelier" },
         { href: `/workshop/vehicle/${id}`, label: vehicle.license_plate },
       ]}
     >

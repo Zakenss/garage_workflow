@@ -9,6 +9,7 @@ import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { FollowupRepairPanel } from "@/components/FollowupRepairPanel";
 import { LoadingPage } from "@/components/LoadingPage";
+import { PartsReceiptPanel } from "@/components/PartsReceiptPanel";
 import {
   AddFollowupIssueForm,
   ReportedIssuesPanel,
@@ -18,6 +19,7 @@ import {
   completeIssueRepair,
   loadVehicleIssuesWithRepair,
   startIssueRepair,
+  type IssuePartInfo,
   type IssueWithPart,
 } from "@/lib/followup-repair";
 import { createFollowupIssue } from "@/lib/mechanic-issues";
@@ -29,6 +31,7 @@ export default function FollowupVehiclePage() {
   const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [issues, setIssues] = useState<IssueWithPart[]>([]);
+  const [parts, setParts] = useState<IssuePartInfo[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [repairBusyId, setRepairBusyId] = useState<string | null>(null);
   const [success, setSuccess] = useState("");
@@ -44,6 +47,20 @@ export default function FollowupVehiclePage() {
     setVehicle(v as Vehicle);
     if (user) {
       setIssues(await loadVehicleIssuesWithRepair(vehicleId, user.id));
+      const { data: partRows } = await supabase
+        .from("parts")
+        .select("id, part_name, status, quantity, supplier, unit_price")
+        .eq("vehicle_id", vehicleId);
+      setParts(
+        (partRows ?? []).map((p) => ({
+          id: p.id,
+          part_name: p.part_name,
+          status: p.status,
+          quantity: Number(p.quantity),
+          supplier: p.supplier ?? null,
+          unit_price: p.unit_price != null ? Number(p.unit_price) : null,
+        }))
+      );
     }
     setLoading(false);
   }
@@ -126,6 +143,10 @@ export default function FollowupVehiclePage() {
   if (!user || loading) return <LoadingPage />;
   if (!vehicle) return <LoadingPage />;
 
+  const allPartsReceived =
+    parts.length > 0 &&
+    parts.every((p) => p && (p.status === "received" || p.status === "in_stock"));
+
   return (
     <AppShell
       user={user}
@@ -143,7 +164,8 @@ export default function FollowupVehiclePage() {
         </Link>
         <h1 className="page-title">{vehicle.license_plate}</h1>
         <p className="page-subtitle">
-          {vehicle.make} {vehicle.model} — signalements et réparations complémentaires
+          {vehicle.make} {vehicle.model} — réception pièces, réparations et signalements
+          oubliés
         </p>
       </div>
 
@@ -159,6 +181,10 @@ export default function FollowupVehiclePage() {
       )}
 
       <section className="mb-8">
+        <PartsReceiptPanel parts={parts} allReceived={allPartsReceived} />
+      </section>
+
+      <section className="mb-8">
         <h2 className="section-title mb-2">Réparations (pièces reçues)</h2>
         <p className="mb-4 text-sm text-slate-500">
           Une fois les pièces reçues, démarrez la réparation manuelle puis indiquez quand
@@ -169,6 +195,7 @@ export default function FollowupVehiclePage() {
           onStart={handleStart}
           onComplete={handleComplete}
           busyId={repairBusyId}
+          showTaskTiming={user.role === "admin"}
         />
       </section>
 
@@ -182,6 +209,10 @@ export default function FollowupVehiclePage() {
         onSubmit={handleAddIssue}
         submitting={submitting}
       />
+      <p className="mt-2 text-xs text-slate-500">
+        Un signalement oublié est envoyé au chef d&apos;atelier pour validation, puis
+        commandé par le magasinier.
+      </p>
     </AppShell>
   );
 }

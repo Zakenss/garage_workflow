@@ -9,13 +9,9 @@ import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { ReconditioningChecklist } from "@/components/ReconditioningChecklist";
-import { ReportedIssuesPanel } from "@/components/ReportedIssuesPanel";
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
 import {
-  fetchVehicleIssues,
-  loadVehicleIssuesWithSync,
   submitStorekeeperChecklist,
-  type MechanicReportedIssue,
 } from "@/lib/mechanic-issues";
 import {
   createDefaultStorekeeperChecklist,
@@ -32,7 +28,6 @@ export default function StorekeeperChecklistPage() {
   const [checklist, setChecklist] = useState<ChecklistState>(
     createDefaultStorekeeperChecklist()
   );
-  const [issues, setIssues] = useState<MechanicReportedIssue[]>([]);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -70,11 +65,6 @@ export default function StorekeeperChecklistPage() {
       setVehicle(v as Vehicle);
       if (user) {
         await loadChecklistRecord();
-        setIssues(
-          await loadVehicleIssuesWithSync(vehicleId, user.id).catch(() =>
-            fetchVehicleIssues(vehicleId)
-          )
-        );
       }
     }
     if (user) init();
@@ -151,14 +141,14 @@ export default function StorekeeperChecklistPage() {
             <> · Soumis le {new Date(submittedAt).toLocaleString("fr-FR")}</>
           )}
         </p>
+        <p className="mt-2 text-sm text-slate-500">
+          Les signalements mécanicien (photos, problèmes, pièces) sont consultables sur{" "}
+          <Link href="/parts" className="font-medium text-slate-700 underline">
+            Photos et problèmes
+          </Link>
+          .
+        </p>
       </div>
-
-      <section className="mb-8">
-        <h2 className="section-title mb-4">
-          Problèmes signalés par le mécanicien (photos)
-        </h2>
-        <ReportedIssuesPanel issues={issues} />
-      </section>
 
       <ReconditioningChecklist state={checklist} onChange={handleChecklistChange} />
 

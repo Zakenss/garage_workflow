@@ -49,7 +49,10 @@ export function ReportedIssuesPanel({
                   <span className="font-medium">Problème :</span> {issue.problem}
                 </p>
                 <p className="mt-1 text-sm text-slate-700">
-                  <span className="font-medium">Pièces :</span> {issue.parts_needed}
+                  <span className="font-medium">Pièces nécessaires :</span>{" "}
+                  <span className="rounded bg-white px-1.5 py-0.5 font-medium text-slate-900 ring-1 ring-slate-200">
+                    {issue.parts_needed}
+                  </span>
                 </p>
                 {issue.mechanic && (
                   <p className="mt-1 text-xs text-slate-500">

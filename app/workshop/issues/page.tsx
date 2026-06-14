@@ -17,7 +17,7 @@ import {
 } from "@/lib/mechanic-issues";
 import { supabase } from "@/lib/supabase";
 
-export default function ManagerIssuesPage() {
+export default function ManagerSignalementsPage() {
   const user = useSession();
   const [issues, setIssues] = useState<MechanicReportedIssue[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export default function ManagerIssuesPage() {
   useEffect(() => {
     load();
     const ch = supabase
-      .channel("manager-issues")
+      .channel("manager-signalements")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "mechanic_reported_issues" },
@@ -70,9 +70,17 @@ export default function ManagerIssuesPage() {
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
       <PageHeader
-        title="Validation signalements"
-        subtitle="Problèmes complémentaires signalés par les mécaniciens"
+        title="Signalements"
+        subtitle="Pièces oubliées signalées par le mécanicien après réception — valider pour commande magasin"
       />
+
+      <p className="mb-6 text-sm text-slate-600">
+        La check-list initiale (problèmes, photos, pièces) est consultée sur{" "}
+        <a href="/parts" className="font-medium text-slate-900 underline">
+          Photos et problèmes
+        </a>
+        . Cette page concerne uniquement les signalements complémentaires.
+      </p>
 
       {loading ? (
         <div className="space-y-3">

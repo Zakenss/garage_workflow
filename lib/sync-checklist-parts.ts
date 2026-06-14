@@ -52,6 +52,37 @@ export function collectChecklistPartRequests(state: ChecklistState) {
   return items;
 }
 
+/** All checklist lines where the mechanic clicked "!" and recorded a signalement. */
+export function collectChecklistSignalements(state: ChecklistState) {
+  const items: Array<{
+    itemId: string;
+    itemLabel: string;
+    partsNeeded: string;
+    problem: string;
+    photoPaths: string[];
+  }> = [];
+
+  for (const sec of state.sections) {
+    for (const grp of sec.groups) {
+      for (const item of grp.items) {
+        if (!item.issue) continue;
+        const problem = item.issue.problem?.trim() ?? "";
+        const partsNeeded = item.issue.partsNeeded?.trim() ?? "";
+        const photoPaths = item.issue.photoPaths ?? [];
+        if (!problem && photoPaths.length === 0 && !partsNeeded) continue;
+        items.push({
+          itemId: item.id,
+          itemLabel: item.label,
+          problem,
+          partsNeeded,
+          photoPaths,
+        });
+      }
+    }
+  }
+  return items;
+}
+
 export async function syncChecklistPartsToDb(
   vehicleId: string,
   diagnosticId: string,

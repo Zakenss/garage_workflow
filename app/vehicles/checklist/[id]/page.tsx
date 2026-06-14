@@ -2,18 +2,19 @@
 
 import { useSession } from "@/lib/session-context";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
+import { ChecklistSubmitSection } from "@/components/ChecklistSubmitSection";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { ReconditioningChecklist } from "@/components/ReconditioningChecklist";
-import { SignaturePad } from "@/components/SignaturePad";
 import { supabase } from "@/lib/supabase";
 import { notifyRole, updateVehicleStatus } from "@/lib/db";
 import {
   createDefaultChecklist,
+  getChecklistSubmitSummary,
   parseChecklistState,
   type ChecklistState,
 } from "@/lib/reconditioning-checklist";
@@ -29,19 +30,28 @@ export default function ReconditioningChecklistPage() {
   const [diagnosticId, setDiagnosticId] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<ChecklistState>(createDefaultChecklist());
   const [signature, setSignature] = useState<string | null>(null);
+  const [signedAt, setSignedAt] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<"diagnostic" | "repair" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"submit" | "repair" | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const checklistRef = useRef(checklist);
   checklistRef.current = checklist;
 
+  const submitSummary = useMemo(() => getChecklistSubmitSummary(checklist), [checklist]);
+  const isSubmitted = Boolean(signedAt);
+  const isRepairPhase = vehicle?.status === "repair_in_progress";
+  const canSubmitChecklist =
+    !isSubmitted &&
+    (vehicle?.status === "diagnostic_assigned" || vehicle?.status === "parts_pending");
+
   async function ensureDiagnostic(mechanicId: string) {
     const { data: existing } = await supabase
       .from("diagnostics")
-      .select("id, checklist_data, signature_data, status")
+      .select("id, checklist_data, signature_data, signed_at, status")
       .eq("vehicle_id", vehicleId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -51,11 +61,7 @@ export default function ReconditioningChecklistPage() {
       setDiagnosticId(existing.id);
       setChecklist(parseChecklistState(existing.checklist_data));
       if (existing.signature_data) setSignature(existing.signature_data);
-      if (existing.checklist_data) {
-        const parsed = parseChecklistState(existing.checklist_data);
-        await syncChecklistPartsToDb(vehicleId, existing.id, parsed);
-        await syncChecklistToReportedIssues(vehicleId, mechanicId, parsed);
-      }
+      if (existing.signed_at) setSignedAt(existing.signed_at);
       return existing.id;
     }
 
@@ -93,22 +99,17 @@ export default function ReconditioningChecklistPage() {
         .from("diagnostics")
         .update({ checklist_data: state })
         .eq("id", diagnosticId);
-      if (!err) {
-        await syncChecklistPartsToDb(vehicleId, diagnosticId, state);
-        const { data: diag } = await supabase
-          .from("diagnostics")
-          .select("mechanic_id")
-          .eq("id", diagnosticId)
-          .single();
-        if (diag?.mechanic_id) {
-          await syncChecklistToReportedIssues(vehicleId, diag.mechanic_id, state);
-        }
-        setSavedAt(new Date());
-      }
+      if (!err) setSavedAt(new Date());
       setSaving(false);
     },
-    [diagnosticId, vehicleId]
+    [diagnosticId]
   );
+
+  async function publishSignalements(state: ChecklistState) {
+    if (!diagnosticId || !user) return;
+    await syncChecklistPartsToDb(vehicleId, diagnosticId, state);
+    await syncChecklistToReportedIssues(vehicleId, user.id, state);
+  }
 
   function handleChecklistChange(next: ChecklistState) {
     setChecklist(next);
@@ -131,91 +132,109 @@ export default function ReconditioningChecklistPage() {
     );
   }
 
-  async function completeDiagnostic() {
-    if (!user || !diagnosticId || !vehicle) return;
+  function openSubmitConfirm() {
     setError("");
     if (!signature) {
-      setError("Signature requise avant de terminer le diagnostic.");
+      setError("Enregistrez votre signature avant de soumettre.");
       return;
     }
+    setConfirmAction("submit");
+    setShowConfirm(true);
+  }
 
-    await persistChecklist(checklistRef.current);
-    await syncChecklistPartsToDb(vehicleId, diagnosticId, checklistRef.current);
+  async function submitChecklist() {
+    if (!user || !diagnosticId || !vehicle || !signature) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const state = checklistRef.current;
+      await persistChecklist(state);
+      await publishSignalements(state);
 
-    await supabase
-      .from("diagnostics")
-      .update({
-        checklist_data: checklistRef.current,
-        signature_data: signature,
-        signed_at: new Date().toISOString(),
-        status: "completed",
-      })
-      .eq("id", diagnosticId);
+      const now = new Date().toISOString();
+      await supabase
+        .from("diagnostics")
+        .update({
+          checklist_data: state,
+          signature_data: signature,
+          signed_at: now,
+          status: "completed",
+        })
+        .eq("id", diagnosticId);
 
-    await updateVehicleStatus(vehicleId, "diagnostic_complete", user, {
-      diagnostic_completed_at: new Date().toISOString(),
-    });
-    await supabase.from("vehicles").update({ status: "parts_pending" }).eq("id", vehicleId);
+      setSignedAt(now);
 
-    await notifyRole(
-      "workshop_manager",
-      "diagnostic_complete",
-      `Check-list terminée — ${vehicle.license_plate}`,
-      vehicleId
-    );
-    await notifyRole(
-      "storekeeper",
-      "diagnostic_complete",
-      `Check-list terminée — ${vehicle.license_plate}`,
-      vehicleId
-    );
+      await updateVehicleStatus(vehicleId, "diagnostic_complete", user, {
+        diagnostic_completed_at: now,
+      });
+      await supabase.from("vehicles").update({ status: "parts_pending" }).eq("id", vehicleId);
 
-    router.push("/vehicles/my");
+      const issueCount = getChecklistSubmitSummary(state).issues.length;
+      const msg = `Check-list soumise — ${vehicle.license_plate}${
+        issueCount > 0 ? ` (${issueCount} signalement${issueCount > 1 ? "s" : ""})` : ""
+      }`;
+
+      await notifyRole("workshop_manager", "diagnostic_complete", msg, vehicleId);
+      await notifyRole("storekeeper", "diagnostic_complete", msg, vehicleId);
+      await notifyRole("admin", "diagnostic_complete", msg, vehicleId);
+
+      router.push("/vehicles/my");
+    } catch {
+      setError("Impossible de soumettre la check-list. Réessayez.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function completeRepair() {
     if (!user || !vehicle) return;
+    setSubmitting(true);
     setError("");
-    await persistChecklist(checklistRef.current);
+    try {
+      const state = checklistRef.current;
+      await persistChecklist(state);
+      await publishSignalements(state);
 
-    const { data: existing } = await supabase
-      .from("repairs")
-      .select("id")
-      .eq("vehicle_id", vehicleId)
-      .maybeSingle();
+      const { data: existing } = await supabase
+        .from("repairs")
+        .select("id")
+        .eq("vehicle_id", vehicleId)
+        .maybeSingle();
 
-    const payload = {
-      vehicle_id: vehicleId,
-      mechanic_id: user.id,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    };
+      const payload = {
+        vehicle_id: vehicleId,
+        mechanic_id: user.id,
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      };
 
-    if (existing) {
-      await supabase.from("repairs").update(payload).eq("id", existing.id);
-    } else {
-      await supabase.from("repairs").insert({
-        ...payload,
-        started_at: new Date().toISOString(),
+      if (existing) {
+        await supabase.from("repairs").update(payload).eq("id", existing.id);
+      } else {
+        await supabase.from("repairs").insert({
+          ...payload,
+          started_at: new Date().toISOString(),
+        });
+      }
+
+      await updateVehicleStatus(vehicleId, "repair_complete", user, {
+        repair_completed_at: new Date().toISOString(),
       });
+      await notifyRole(
+        "workshop_manager",
+        "repair_complete",
+        `Reconditionnement terminé — ${vehicle.license_plate}`,
+        vehicleId
+      );
+      router.push("/vehicles/my");
+    } catch {
+      setError("Impossible de terminer le reconditionnement.");
+    } finally {
+      setSubmitting(false);
     }
-
-    await updateVehicleStatus(vehicleId, "repair_complete", user, {
-      repair_completed_at: new Date().toISOString(),
-    });
-    await notifyRole(
-      "workshop_manager",
-      "repair_complete",
-      `Reconditionnement terminé — ${vehicle.license_plate}`,
-      vehicleId
-    );
-    router.push("/vehicles/my");
   }
 
   if (!user || !vehicle) return <LoadingPage />;
-
-  const isRepairPhase = vehicle.status === "repair_in_progress";
-  const canCompleteDiagnostic = vehicle.status === "diagnostic_assigned";
 
   return (
     <AppShell
@@ -235,67 +254,69 @@ export default function ReconditioningChecklistPage() {
           {!saving && savedAt && (
             <> · Sauvegardé à {savedAt.toLocaleTimeString("fr-FR")}</>
           )}
+          {isSubmitted && " · Soumise"}
         </p>
       </div>
 
       <ReconditioningChecklist
         state={checklist}
         onChange={handleChecklistChange}
-        enableIssues
+        enableIssues={!isSubmitted}
+        readOnly={isSubmitted && !isRepairPhase}
         issuePhotoPrefix={`${vehicleId}/${diagnosticId ?? "new"}`}
       />
 
-      <div className="card-padded mt-6 space-y-5">
+      <div className="card-padded mt-6">
         <PhotoUpload
           bucket="diagnostic-photos"
           pathPrefix={`${vehicleId}/${diagnosticId ?? "new"}`}
           onUploaded={saveDiagnosticPhotos}
           label="Photos pièces / zones endommagées"
         />
-
-        {canCompleteDiagnostic && (
-          <>
-            <div>
-              <h2 className="section-title mb-3">Signature électronique</h2>
-              <SignaturePad onSave={setSignature} />
-              {signature && (
-                <Alert variant="success" className="mt-3">
-                  Signature enregistrée
-                </Alert>
-              )}
-            </div>
-
-            {error && <Alert variant="error">{error}</Alert>}
-
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmAction("diagnostic");
-                setShowConfirm(true);
-              }}
-              className="btn-primary-block"
-            >
-              Terminer le diagnostic
-            </button>
-          </>
-        )}
-
-        {isRepairPhase && (
-          <>
-            {error && <Alert variant="error">{error}</Alert>}
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmAction("repair");
-                setShowConfirm(true);
-              }}
-              className="btn-success w-full !min-h-12"
-            >
-              Reconditionnement terminé
-            </button>
-          </>
-        )}
       </div>
+
+      {canSubmitChecklist && (
+        <ChecklistSubmitSection
+          summary={submitSummary}
+          signature={signature}
+          onSignature={setSignature}
+          signedAt={signedAt}
+          onSubmit={openSubmitConfirm}
+          submitting={submitting}
+          error={error}
+        />
+      )}
+
+      {isSubmitted && !isRepairPhase && (
+        <ChecklistSubmitSection
+          summary={submitSummary}
+          signature={signature}
+          onSignature={setSignature}
+          signedAt={signedAt}
+          onSubmit={() => {}}
+        />
+      )}
+
+      {isRepairPhase && (
+        <div className="card-padded mt-6 space-y-4">
+          <h2 className="section-title">Fin de reconditionnement</h2>
+          <p className="text-sm text-slate-600">
+            Vérifiez une dernière fois la check-list et les signalements avant de clôturer.
+          </p>
+          {error && <Alert variant="error">{error}</Alert>}
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => {
+              setConfirmAction("repair");
+              setShowConfirm(true);
+            }}
+            className="btn-success w-full !min-h-12"
+          >
+            {submitting ? "Enregistrement…" : "Reconditionnement terminé"}
+          </button>
+        </div>
+      )}
 
       {showConfirm && (
         <div
@@ -304,12 +325,37 @@ export default function ReconditioningChecklistPage() {
           aria-modal="true"
           aria-labelledby="confirm-title"
         >
-          <div className="modal-panel">
+          <div className="modal-panel max-h-[85vh] overflow-y-auto">
             <p id="confirm-title" className="font-medium leading-relaxed text-slate-900">
               {confirmAction === "repair"
                 ? "Confirmez-vous que le reconditionnement est complet ?"
-                : "Confirmez-vous que la check-list diagnostic est complète ?"}
+                : "Confirmez-vous la soumission de la check-list ?"}
             </p>
+
+            {confirmAction === "submit" && (
+              <div className="mt-4 space-y-3 text-sm">
+                {submitSummary.unchecked.length > 0 && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">
+                    <strong>{submitSummary.unchecked.length}</strong> point
+                    {submitSummary.unchecked.length > 1 ? "s" : ""} non coché
+                    {submitSummary.unchecked.length > 1 ? "s" : ""} — rien n&apos;oublié ?
+                  </p>
+                )}
+                {submitSummary.issues.length > 0 ? (
+                  <p className="text-slate-700">
+                    <strong>{submitSummary.issues.length}</strong> signalement
+                    {submitSummary.issues.length > 1 ? "s" : ""} avec photos et pièces seront
+                    envoyés au chef d&apos;atelier et au magasinier.
+                  </p>
+                ) : (
+                  <p className="text-slate-600">
+                    Aucun signalement (!) — confirmez seulement si aucun problème n&apos;a été
+                    détecté.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -319,19 +365,20 @@ export default function ReconditioningChecklistPage() {
                 }}
                 className="btn-secondary flex-1"
               >
-                Retour
+                Retour — vérifier
               </button>
               <button
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   setShowConfirm(false);
                   if (confirmAction === "repair") completeRepair();
-                  else completeDiagnostic();
+                  else submitChecklist();
                   setConfirmAction(null);
                 }}
                 className="btn-primary-block flex-1"
               >
-                Confirmer
+                {submitting ? "Envoi…" : "Confirmer la soumission"}
               </button>
             </div>
           </div>

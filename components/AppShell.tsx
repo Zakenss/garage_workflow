@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/constants";
 
@@ -17,12 +17,14 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      // Full navigation avoids stale webpack chunks after long dev sessions
+      window.location.href = "/login";
+    }
   }
 
   return (

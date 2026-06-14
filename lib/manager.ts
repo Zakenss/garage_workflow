@@ -2,16 +2,9 @@ import type { VehicleStatus } from "./types";
 
 export const MANAGER_NAV = [
   { href: "/dashboard", label: "Tableau de bord" },
-  { href: "/workshop/reception", label: "Réception" },
-  { href: "/workshop/in-workshop", label: "Atelier" },
+  { href: "/vehicles/tracking", label: "Suivi" },
   { href: "/workshop/queue", label: "Priorités" },
-  { href: "/parts", label: "Pièces & photos" },
-  { href: "/parts/costs", label: "Coûts pièces" },
-  { href: "/dashboard/supervision", label: "Supervision" },
-  { href: "/workshop/issues", label: "Validation signalements" },
-  { href: "/vehicles/tracking", label: "Suivi véhicules" },
-  { href: "/workshop/termine", label: "Terminé" },
-  { href: "/workshop/vei", label: "VEI" },
+  { href: "/parts", label: "Photos et problèmes" },
 ] as const;
 
 /** Waiting for mechanic assignment */

@@ -537,6 +537,54 @@ export function countChecklistProgress(state: ChecklistState): {
   return { checked, total };
 }
 
+export type ChecklistIssueSummary = {
+  itemLabel: string;
+  sectionTitle: string;
+  problem: string;
+  partsNeeded: string;
+  photoCount: number;
+};
+
+export type ChecklistSubmitSummary = {
+  progress: { checked: number; total: number };
+  unchecked: { label: string; sectionTitle: string }[];
+  issues: ChecklistIssueSummary[];
+};
+
+export function getChecklistSubmitSummary(state: ChecklistState): ChecklistSubmitSummary {
+  const unchecked: { label: string; sectionTitle: string }[] = [];
+  const issues: ChecklistIssueSummary[] = [];
+
+  for (const sec of state.sections) {
+    for (const grp of sec.groups) {
+      for (const it of grp.items) {
+        if (!it.checked) {
+          unchecked.push({ label: it.label, sectionTitle: sec.title });
+        }
+        if (it.issue?.problem?.trim()) {
+          issues.push({
+            itemLabel: it.label,
+            sectionTitle: sec.title,
+            problem: it.issue.problem.trim(),
+            partsNeeded: it.issue.partsNeeded?.trim() || "—",
+            photoCount: it.issue.photoPaths?.length ?? 0,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    progress: countChecklistProgress(state),
+    unchecked,
+    issues,
+  };
+}
+
+export function collectChecklistIssues(state: ChecklistState): ChecklistIssueSummary[] {
+  return getChecklistSubmitSummary(state).issues;
+}
+
 export function toggleChecklistItem(
   state: ChecklistState,
   sectionId: string,

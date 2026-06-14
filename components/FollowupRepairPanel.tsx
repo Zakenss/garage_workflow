@@ -31,11 +31,14 @@ export function FollowupRepairPanel({
   onStart,
   onComplete,
   busyId,
+  showTaskTiming = false,
 }: {
   issues: IssueWithPart[];
   onStart: (issue: IssueWithPart) => void;
   onComplete: (issue: IssueWithPart) => void;
   busyId?: string | null;
+  /** Repair start/end/duration — admin only */
+  showTaskTiming?: boolean;
 }) {
   const repairable = issues.filter(
     (i) => i.status === "approved" || i.repairState === "completed"
@@ -54,9 +57,11 @@ export function FollowupRepairPanel({
     <div className="space-y-3">
       {repairable.map((issue) => {
         const photos = issuePhotoUrls(issue);
-        const duration = formatDuration(
-          repairDurationMinutes(issue.repair_started_at, issue.repair_completed_at)
-        );
+        const duration = showTaskTiming
+          ? formatDuration(
+              repairDurationMinutes(issue.repair_started_at, issue.repair_completed_at)
+            )
+          : null;
 
         return (
           <div
@@ -92,7 +97,8 @@ export function FollowupRepairPanel({
               </div>
             )}
 
-            {(issue.repair_started_at || issue.repair_completed_at) && (
+            {showTaskTiming &&
+              (issue.repair_started_at || issue.repair_completed_at) && (
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 px-3 py-2">
                   <p className="text-xs text-slate-500">Début</p>

@@ -9,6 +9,7 @@ import { ManagerDashboard } from "@/components/ManagerDashboard";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ADMIN_NAV } from "@/lib/role-nav";
 import { useSession } from "@/lib/session-context";
 import { supabase } from "@/lib/supabase";
 import type { Vehicle } from "@/lib/types";
@@ -61,12 +62,7 @@ export default function DashboardPage() {
   return (
     <AppShell
       user={user}
-      nav={[
-        { href: "/dashboard", label: "Tableau de bord" },
-        { href: "/dashboard/supervision", label: "Supervision atelier" },
-        { href: "/parts/costs", label: "Coûts pièces" },
-        { href: "/users", label: "Utilisateurs" },
-      ]}
+      nav={[...ADMIN_NAV]}
     >
       <PageHeader
         title="Administration"
@@ -75,8 +71,21 @@ export default function DashboardPage() {
       />
 
       <Link
+        href="/parts"
+        className="card-interactive mb-4 flex flex-col gap-1 border-indigo-200 bg-indigo-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <p className="font-semibold text-indigo-950">Photos et problèmes</p>
+          <p className="text-sm text-indigo-800">
+            Check-lists mécaniciens — problèmes, photos et pièces
+          </p>
+        </div>
+        <span className="text-sm font-medium text-indigo-700">Voir →</span>
+      </Link>
+
+      <Link
         href="/dashboard/supervision"
-        className="card-interactive mb-6 flex flex-col gap-1 border-indigo-200 bg-indigo-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        className="card-interactive mb-6 flex flex-col gap-1 border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <p className="font-semibold text-indigo-950">Supervision atelier</p>

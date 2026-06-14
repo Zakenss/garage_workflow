@@ -13,6 +13,11 @@ import { MechanicSlotButtons } from "@/components/MechanicSlotButtons";
 import { VeiStatusPicker } from "@/components/VeiStatusPicker";
 import { MANAGER_NAV } from "@/lib/manager";
 import { assignVehicleToMechanic, updateVeiStatus, type VeiStatus } from "@/lib/manager-actions";
+import {
+  isReceptionComplete,
+  isVeiReadyForWorkshop,
+  needsVeiBeforeWorkshop,
+} from "@/lib/manager-pipeline";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
 import { VEI_STATUS_LABELS } from "@/lib/constants";
@@ -167,19 +172,11 @@ export default function ReceptionDetailPage() {
     setError("");
     setReceptionFeedback("");
     setVeiFeedback("");
-    if (!vin.trim()) {
-      setError("Le numéro VIN / série est requis.");
+    if (!isReceptionComplete({ vin }, photoCount)) {
+      setError("Le numéro VIN / série et 4 photos extérieures sont requis.");
       return;
     }
-    if (photoCount < 4) {
-      setError("Minimum 4 photos extérieures requises.");
-      return;
-    }
-    if (
-      vehicle.vei_procedure &&
-      vei?.status !== "completed" &&
-      vei?.status !== "scheduled"
-    ) {
+    if (needsVeiBeforeWorkshop(vehicle) && !isVeiReadyForWorkshop(vei?.status)) {
       setError("Planifiez ou réalisez l'expertise VEI avant d'envoyer à l'atelier.");
       return;
     }
@@ -209,6 +206,16 @@ export default function ReceptionDetailPage() {
 
   const isArrived = vehicle.status === "arrived";
   const awaitingAssign = vehicle.status === "in_workshop";
+  const receptionComplete = isReceptionComplete(
+    isArrived ? { vin } : vehicle,
+    photoCount
+  );
+  const veiRequired = needsVeiBeforeWorkshop(vehicle);
+  const veiReady = isVeiReadyForWorkshop(vei?.status);
+  const canSendToWorkshop =
+    isArrived &&
+    receptionComplete &&
+    (!veiRequired || veiReady);
 
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
@@ -218,6 +225,13 @@ export default function ReceptionDetailPage() {
           <p className="page-subtitle">
             {vehicle.make} {vehicle.model}
           </p>
+          {isArrived && (
+            <p className="mt-2 text-sm text-slate-600">
+              {veiRequired
+                ? "Étape 1 : Réception → Étape 2 : VEI → Étape 3 : À assigner"
+                : "Étape 1 : Réception → Étape 2 : À assigner"}
+            </p>
+          )}
         </div>
         <StatusBadge status={vehicle.status} />
       </div>
@@ -255,6 +269,18 @@ export default function ReceptionDetailPage() {
             Ouvrir dans Atelier
           </button>
         </div>
+      )}
+
+      {vehicle.vei_procedure && isArrived && !receptionComplete && (
+        <Alert variant="info" className="mb-4">
+          Terminez d&apos;abord la réception (VIN + 4 photos) avant l&apos;expertise VEI.
+        </Alert>
+      )}
+
+      {vehicle.vei_procedure && receptionComplete && isArrived && !veiReady && (
+        <Alert variant="warning" className="mb-4 font-medium">
+          Réception terminée — planifiez ou réalisez l&apos;expertise VEI avant l&apos;assignation.
+        </Alert>
       )}
 
       {isArrived ? (
@@ -340,7 +366,7 @@ export default function ReceptionDetailPage() {
         </div>
       )}
 
-      {vehicle.vei_procedure && (
+      {vehicle.vei_procedure && (receptionComplete || !isArrived) && (
         <>
           <Alert variant="warning" className="mb-4 mt-6 font-medium">
             Ce véhicule nécessite une expertise VEI
@@ -422,26 +448,52 @@ export default function ReceptionDetailPage() {
               >
                 {savingVei ? "Enregistrement…" : "Enregistrer détails VEI"}
               </button>
+
+              {isArrived && veiReady && (
+                <p className="text-sm text-emerald-700">
+                  Expertise VEI prête — vous pouvez envoyer le véhicule à l&apos;atelier.
+                </p>
+              )}
             </div>
           )}
         </>
       )}
 
       {isArrived && (
-      <div className={`space-y-4 ${vehicle.vei_procedure ? "card-padded mt-6" : "mt-6"}`}>
-        {vehicle.vei_procedure && (
+      <div className={`space-y-4 ${vehicle.vei_procedure && receptionComplete ? "card-padded mt-6" : "mt-6"}`}>
+        {receptionComplete && (
           <>
             <h2 className="section-title">Finaliser</h2>
             <p className="text-sm text-slate-500">
-              Les deux sections doivent être complètes avant l&apos;envoi à
-              l&apos;atelier.
+              {veiRequired && !veiReady
+                ? "Complétez l'expertise VEI ci-dessus avant l'envoi à l'atelier."
+                : "Envoyez le véhicule à l'atelier pour l'assigner à un mécanicien."}
             </p>
           </>
         )}
         {error && <Alert variant="error">{error}</Alert>}
-        <button type="button" onClick={sendToWorkshop} className="btn-primary-block">
-          Envoyer à l&apos;atelier
-        </button>
+        {canSendToWorkshop ? (
+          <button type="button" onClick={sendToWorkshop} className="btn-primary-block">
+            Envoyer à l&apos;atelier
+          </button>
+        ) : (
+          <p className="text-sm text-slate-500">
+            {!receptionComplete
+              ? "VIN et 4 photos extérieures requis pour continuer."
+              : veiRequired && !veiReady
+                ? "Expertise VEI requise avant l'envoi à l'atelier."
+                : null}
+          </p>
+        )}
+        {receptionComplete && veiRequired && !veiReady && (
+          <button
+            type="button"
+            onClick={() => router.push("/workshop/vei")}
+            className="btn-secondary w-full"
+          >
+            Ouvrir la liste VEI
+          </button>
+        )}
       </div>
       )}
 

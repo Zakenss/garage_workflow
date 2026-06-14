@@ -89,6 +89,7 @@ export async function fetchPendingIssues(): Promise<MechanicReportedIssue[]> {
       "*, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
     )
     .eq("status", "pending_manager")
+    .eq("source", "followup")
     .order("created_at", { ascending: false });
   if (error) {
     console.error("fetchPendingIssues:", error.message);
@@ -97,20 +98,9 @@ export async function fetchPendingIssues(): Promise<MechanicReportedIssue[]> {
   return (data ?? []).map(rowToIssue);
 }
 
-export async function fetchAllIssuesGrouped(): Promise<VehicleIssuesGroup[]> {
-  const { data, error } = await supabase
-    .from("mechanic_reported_issues")
-    .select(
-      "*, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
-    )
-    .in("status", ["approved", "pending_manager"])
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("fetchAllIssuesGrouped:", error.message);
-    return [];
-  }
-
+function groupIssuesByVehicle(
+  data: Record<string, unknown>[] | null
+): VehicleIssuesGroup[] {
   const byVehicle = new Map<string, VehicleIssuesGroup>();
   for (const row of data ?? []) {
     const issue = rowToIssue(row);
@@ -125,23 +115,115 @@ export async function fetchAllIssuesGrouped(): Promise<VehicleIssuesGroup[]> {
   );
 }
 
+export async function fetchAllIssuesGrouped(): Promise<VehicleIssuesGroup[]> {
+  const { data, error } = await supabase
+    .from("mechanic_reported_issues")
+    .select(
+      "*, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
+    )
+    .neq("status", "rejected")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchAllIssuesGrouped:", error.message);
+    return [];
+  }
+
+  return groupIssuesByVehicle(data);
+}
+
+/** Initial mechanic checklist signalements only (Photos et problèmes). */
+export async function fetchChecklistIssuesGrouped(): Promise<VehicleIssuesGroup[]> {
+  const { data, error } = await supabase
+    .from("mechanic_reported_issues")
+    .select(
+      "*, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
+    )
+    .eq("source", "checklist")
+    .neq("status", "rejected")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchChecklistIssuesGrouped:", error.message);
+    return [];
+  }
+
+  return groupIssuesByVehicle(data);
+}
+
+/** Forgotten-piece signalements awaiting manager validation. */
+export async function fetchFollowupIssuesGrouped(): Promise<VehicleIssuesGroup[]> {
+  const { data, error } = await supabase
+    .from("mechanic_reported_issues")
+    .select(
+      "*, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
+    )
+    .eq("source", "followup")
+    .neq("status", "rejected")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchFollowupIssuesGrouped:", error.message);
+    return [];
+  }
+
+  return groupIssuesByVehicle(data);
+}
+
+export type SubmittedChecklistRow = {
+  vehicle: NonNullable<MechanicReportedIssue["vehicle"]>;
+  submittedAt: string;
+  mechanicName: string | null;
+};
+
+/** Vehicles whose mechanic submitted the initial reconditioning checklist. */
+export async function fetchSubmittedChecklistVehicles(): Promise<SubmittedChecklistRow[]> {
+  const { data, error } = await supabase
+    .from("diagnostics")
+    .select(
+      "signed_at, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
+    )
+    .not("signed_at", "is", null)
+    .order("signed_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchSubmittedChecklistVehicles:", error.message);
+    return [];
+  }
+
+  const byVehicle = new Map<string, SubmittedChecklistRow>();
+  for (const row of data ?? []) {
+    const raw = row.vehicle;
+    const v = Array.isArray(raw)
+      ? (raw[0] as SubmittedChecklistRow["vehicle"] | undefined) ?? null
+      : (raw as SubmittedChecklistRow["vehicle"] | null);
+    if (!v || !row.signed_at) continue;
+    const existing = byVehicle.get(v.id);
+    if (existing && existing.submittedAt >= row.signed_at) continue;
+    const mechanic = row.mechanic as { full_name: string } | null;
+    byVehicle.set(v.id, {
+      vehicle: v,
+      submittedAt: row.signed_at,
+      mechanicName: mechanic?.full_name ?? null,
+    });
+  }
+
+  return Array.from(byVehicle.values()).sort((a, b) =>
+    a.vehicle.license_plate.localeCompare(b.vehicle.license_plate)
+  );
+}
+
 export async function syncChecklistToReportedIssues(
   vehicleId: string,
   mechanicId: string,
   state: ChecklistState
 ) {
-  const requests = collectChecklistPartRequests(state);
+  const { collectChecklistSignalements } = await import("./sync-checklist-parts");
+  const requests = collectChecklistSignalements(state);
   const activeIds = new Set<string>();
 
   for (const req of requests) {
     activeIds.add(req.itemId);
-    const { data: existing } = await supabase
-      .from("mechanic_reported_issues")
-      .select("id, status")
-      .eq("vehicle_id", vehicleId)
-      .eq("checklist_item_id", req.itemId)
-      .maybeSingle();
-
     const payload = {
       vehicle_id: vehicleId,
       mechanic_id: mechanicId,
@@ -153,17 +235,51 @@ export async function syncChecklistToReportedIssues(
       photo_paths: req.photoPaths,
     };
 
+    const { data: existing, error: findError } = await supabase
+      .from("mechanic_reported_issues")
+      .select("id")
+      .eq("vehicle_id", vehicleId)
+      .eq("checklist_item_id", req.itemId)
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) {
+      console.error("syncChecklistToReportedIssues find:", findError.message);
+      continue;
+    }
+
     if (existing) {
-      await supabase
+      const { error } = await supabase
         .from("mechanic_reported_issues")
         .update(payload)
         .eq("id", existing.id);
+      if (error) console.error("syncChecklistToReportedIssues update:", error.message);
+      continue;
+    }
+
+    const { error: insertError } = await supabase.from("mechanic_reported_issues").insert({
+      ...payload,
+      status: "approved",
+      validated_at: new Date().toISOString(),
+    });
+
+    if (!insertError) continue;
+
+    const isDuplicate =
+      insertError.code === "23505" ||
+      insertError.message.includes("duplicate key");
+
+    if (isDuplicate) {
+      const { error: updateError } = await supabase
+        .from("mechanic_reported_issues")
+        .update(payload)
+        .eq("vehicle_id", vehicleId)
+        .eq("checklist_item_id", req.itemId);
+      if (updateError) {
+        console.error("syncChecklistToReportedIssues retry update:", updateError.message);
+      }
     } else {
-      await supabase.from("mechanic_reported_issues").insert({
-        ...payload,
-        status: "approved",
-        validated_at: new Date().toISOString(),
-      });
+      console.error("syncChecklistToReportedIssues insert:", insertError.message);
     }
   }
 

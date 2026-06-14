@@ -8,63 +8,51 @@ import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge } from "@/components/VehicleCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MechanicSlotButtons } from "@/components/MechanicSlotButtons";
-import { VeiStatusPicker } from "@/components/VeiStatusPicker";
 import {
   MANAGER_NAV,
   WORKSHOP_ASSIGNED_STATUSES,
   WORKSHOP_WAITING_STATUS,
 } from "@/lib/manager";
-import { assignVehicleToMechanic, updateVeiStatus, type VeiStatus } from "@/lib/manager-actions";
-import { VEI_STATUS_LABELS } from "@/lib/constants";
+import { assignVehicleToMechanic } from "@/lib/manager-actions";
+import { fetchManagerPipelineCounts } from "@/lib/manager-pipeline";
+import { fetchPendingIssues } from "@/lib/mechanic-issues";
 import { supabase } from "@/lib/supabase";
 import {
   fetchAllWorkshopVehicles,
   fetchRepairCompleteVehicles,
   fetchWaitingVehicles,
 } from "@/lib/workshop-vehicles";
-import { fetchAllVehiclePartCosts, formatEuro, grandTotal } from "@/lib/parts-costs";
 import type { SessionUser, User, Vehicle } from "@/lib/types";
-
-type VeiAlert = {
-  id: string;
-  status: string;
-  vehicles: {
-    id: string;
-    license_plate: string;
-    make: string;
-    model: string;
-  };
-};
 
 type VehicleWithMechanic = Vehicle & {
   mechanic: { full_name: string; mechanic_slot: number | null } | null;
 };
 
 export function ManagerDashboard({ user }: { user: SessionUser }) {
-  const [arrived, setArrived] = useState<Vehicle[]>([]);
-  const [inWorkshop, setInWorkshop] = useState<VehicleWithMechanic[]>([]);
   const [waiting, setWaiting] = useState<Vehicle[]>([]);
-  const [mechanics, setMechanics] = useState<User[]>([]);
-  const [veiAlerts, setVeiAlerts] = useState<VeiAlert[]>([]);
-  const [veiToSchedule, setVeiToSchedule] = useState(0);
+  const [inWorkshop, setInWorkshop] = useState<VehicleWithMechanic[]>([]);
   const [completed, setCompleted] = useState<VehicleWithMechanic[]>([]);
-  const [partsCostLabel, setPartsCostLabel] = useState("0 €");
+  const [mechanics, setMechanics] = useState<User[]>([]);
+  const [pendingSignalements, setPendingSignalements] = useState(0);
+  const [pendingReception, setPendingReception] = useState(0);
+  const [pendingVei, setPendingVei] = useState(0);
   const [busySlot, setBusySlot] = useState<number | null>(null);
-  const [busyVeiId, setBusyVeiId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const { data: arrivedData } = await supabase
-      .from("vehicles")
-      .select("*")
-      .eq("status", "arrived")
-      .order("arrival_date", { ascending: false });
-    setArrived((arrivedData as Vehicle[]) ?? []);
-
-    const workshopData = await fetchAllWorkshopVehicles();
+    const [workshopData, waitingList, completedList, pending, pipeline] = await Promise.all([
+      fetchAllWorkshopVehicles(),
+      fetchWaitingVehicles(),
+      fetchRepairCompleteVehicles(),
+      fetchPendingIssues(),
+      fetchManagerPipelineCounts(),
+    ]);
     setInWorkshop(workshopData);
-    setWaiting(await fetchWaitingVehicles());
-    setCompleted(await fetchRepairCompleteVehicles());
+    setWaiting(waitingList);
+    setCompleted(completedList);
+    setPendingSignalements(pending.length);
+    setPendingReception(pipeline.pendingReception);
+    setPendingVei(pipeline.pendingVei);
 
     const { data: mechanicsData } = await supabase
       .from("users")
@@ -73,23 +61,6 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
       .eq("active", true)
       .order("mechanic_slot");
     setMechanics((mechanicsData as User[]) ?? []);
-
-    const { data: veiData } = await supabase
-      .from("vei_cases")
-      .select("id, status, vehicles(id, license_plate, make, model)")
-      .neq("status", "completed")
-      .order("created_at", { ascending: false });
-    setVeiAlerts((veiData as unknown as VeiAlert[]) ?? []);
-
-    const { count: toSchedule } = await supabase
-      .from("vei_cases")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "to_schedule");
-    setVeiToSchedule(toSchedule ?? 0);
-
-    const costGroups = await fetchAllVehiclePartCosts();
-    setPartsCostLabel(formatEuro(grandTotal(costGroups)));
-
     setLoading(false);
   }
 
@@ -104,12 +75,17 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "mechanic_reported_issues" },
+        () => load()
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "vei_cases" },
         () => load()
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "mechanic_assignments" },
+        { event: "*", schema: "public", table: "vehicle_photos" },
         () => load()
       )
       .subscribe();
@@ -131,107 +107,74 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
     }
   }
 
-  async function quickVeiStatus(alert: VeiAlert, status: VeiStatus) {
-    if (alert.status === status || !alert.vehicles) return;
-    setBusyVeiId(alert.id);
-    try {
-      await updateVeiStatus(alert.id, status, user, alert.vehicles.id);
-      await load();
-    } finally {
-      setBusyVeiId(null);
-    }
-  }
+  const activeCount = inWorkshop.filter((v) => v.status !== WORKSHOP_WAITING_STATUS).length;
 
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
-      <PageHeader
-        title="Tableau de bord"
-        subtitle="Réception et suivi atelier"
-      />
+      <PageHeader title="Tableau de bord" subtitle="Vue d'ensemble atelier" />
 
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard
+          label="Réception"
+          value={pendingReception}
+          href="/workshop/reception"
+          highlight={pendingReception > 0}
+        />
+        <StatCard
+          label="VEI"
+          value={pendingVei}
+          href="/workshop/vei"
+          highlight={pendingVei > 0}
+        />
         <StatCard
           label="À assigner"
           value={waiting.length}
           href="/workshop/in-workshop?tab=assign"
           highlight={waiting.length > 0}
         />
+        <StatCard label="En atelier" value={activeCount} href="/workshop/in-workshop" />
         <StatCard
-          label="En atelier"
-          value={inWorkshop.length}
-          href="/workshop/in-workshop"
+          label="Signalements"
+          value={pendingSignalements}
+          href="/workshop/issues"
+          highlight={pendingSignalements > 0}
         />
-        <StatCard
-          label="Terminé"
-          value={completed.length}
-          href="/workshop/termine"
-          highlight={completed.length > 0}
-        />
-        <StatCard label="Coûts pièces" value={partsCostLabel} href="/parts/costs" />
-        <StatCard label="Arrivés" value={arrived.length} href="/workshop/reception" />
-        <StatCard
-          label="VEI à planifier"
-          value={veiToSchedule}
-          href="/workshop/vei"
-          highlight={veiToSchedule > 0}
-        />
+        <StatCard label="Terminé" value={completed.length} href="/workshop/termine" />
       </div>
 
+      {pendingSignalements > 0 && (
+        <Link
+          href="/workshop/issues"
+          className="mb-6 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm transition-colors hover:bg-amber-100"
+        >
+          <span className="font-medium text-amber-900">
+            {pendingSignalements} signalement{pendingSignalements > 1 ? "s" : ""} à valider
+          </span>
+          <span className="text-amber-700">Valider →</span>
+        </Link>
+      )}
+
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
             <div key={i} className="skeleton h-20 rounded-xl" />
           ))}
         </div>
       ) : (
         <div className="space-y-8">
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="section-title">Véhicules arrivés</h2>
-              <Link href="/workshop/reception" className="text-sm text-slate-600 hover:text-slate-900">
-                Voir tout →
-              </Link>
-            </div>
-            {arrived.length === 0 ? (
-              <EmptyState title="Aucun véhicule arrivé" />
-            ) : (
-              <div className="space-y-2">
-                {arrived.map((v) => (
-                  <Link
-                    key={v.id}
-                    href={`/workshop/reception/${v.id}`}
-                    className="card-interactive flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-semibold">{v.license_plate}</p>
-                      <p className="text-sm text-slate-600">
-                        {v.make} {v.model}
-                      </p>
-                    </div>
-                    <StatusBadge status={v.status} />
-                  </Link>
-                ))}
+          {waiting.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="section-title">À assigner</h2>
+                <Link
+                  href="/workshop/in-workshop?tab=assign"
+                  className="text-sm text-slate-600 hover:text-slate-900"
+                >
+                  Tout voir →
+                </Link>
               </div>
-            )}
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="section-title">
-                À assigner ({waiting.length})
-              </h2>
-              <Link
-                href="/workshop/in-workshop"
-                className="text-sm text-slate-600 hover:text-slate-900"
-              >
-                Atelier →
-              </Link>
-            </div>
-            {waiting.length === 0 ? (
-              <EmptyState title="Aucun véhicule en attente d'assignation" />
-            ) : (
               <div className="space-y-3">
-                {waiting.slice(0, 5).map((v) => (
+                {waiting.slice(0, 3).map((v) => (
                   <div key={v.id} className="card-padded space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -250,138 +193,47 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
                   </div>
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          )}
 
           <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="section-title">En cours en atelier</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="section-title">En atelier</h2>
               <Link
                 href="/workshop/in-workshop"
                 className="text-sm text-slate-600 hover:text-slate-900"
               >
-                Voir tout →
+                Tout voir →
               </Link>
             </div>
-            {inWorkshop.filter((v) => v.status !== WORKSHOP_WAITING_STATUS).length ===
-            0 ? (
+            {activeCount === 0 ? (
               <EmptyState title="Aucun véhicule en cours" />
             ) : (
               <div className="space-y-2">
                 {inWorkshop
                   .filter((v) => v.status !== WORKSHOP_WAITING_STATUS)
-                  .slice(0, 5)
+                  .slice(0, 6)
                   .map((v) => (
-                  <Link
-                    key={v.id}
-                    href={`/workshop/vehicle/${v.id}`}
-                    className="card-interactive flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold">{v.license_plate}</p>
-                        {WORKSHOP_ASSIGNED_STATUSES.includes(v.status) && (
-                          <PriorityBadge priority={v.dispatch_priority} />
-                        )}
-                      </div>
-                      <p className="text-sm text-slate-600">
-                        {v.make} {v.model}
-                      </p>
-                      {WORKSHOP_ASSIGNED_STATUSES.includes(v.status) && v.mechanic && (
-                        <p className="mt-1 text-xs font-medium text-slate-700">
-                          Mécanicien {v.mechanic.mechanic_slot ?? "?"} —{" "}
-                          {v.mechanic.full_name}
-                        </p>
-                      )}
-                      {v.status === WORKSHOP_WAITING_STATUS && (
-                        <p className="mt-1 text-xs text-amber-700">
-                          En attente d&apos;assignation
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge status={v.status} />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="section-title">
-                Terminé — réparés par mécanicien ({completed.length})
-              </h2>
-              <Link
-                href="/workshop/termine"
-                className="text-sm text-slate-600 hover:text-slate-900"
-              >
-                Voir tout →
-              </Link>
-            </div>
-            {completed.length === 0 ? (
-              <EmptyState title="Aucun véhicule terminé par un mécanicien" />
-            ) : (
-              <div className="space-y-2">
-                {completed.slice(0, 5).map((v) => (
-                  <Link
-                    key={v.id}
-                    href={`/workshop/vehicle/${v.id}`}
-                    className="card-interactive flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-semibold">{v.license_plate}</p>
-                      <p className="text-sm text-slate-600">
-                        {v.make} {v.model}
-                      </p>
-                      {v.mechanic && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          Mécan. {v.mechanic.mechanic_slot} — {v.mechanic.full_name}
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge status={v.status} />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="section-title">Alertes VEI</h2>
-              <Link href="/workshop/vei" className="text-sm text-slate-600 hover:text-slate-900">
-                Liste VEI →
-              </Link>
-            </div>
-            {veiAlerts.length === 0 ? (
-              <EmptyState title="Aucune alerte VEI" />
-            ) : (
-              <div className="space-y-3">
-                {veiAlerts.map((r) => {
-                  const vehicle = r.vehicles;
-                  if (!vehicle) return null;
-                  return (
-                  <div key={r.id} className="card-padded space-y-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-semibold">{vehicle.license_plate}</p>
+                    <Link
+                      key={v.id}
+                      href={`/workshop/vehicle/${v.id}`}
+                      className="card-interactive flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{v.license_plate}</p>
+                          {WORKSHOP_ASSIGNED_STATUSES.includes(v.status) && (
+                            <PriorityBadge priority={v.dispatch_priority} />
+                          )}
+                        </div>
                         <p className="text-sm text-slate-600">
-                          {vehicle.make} {vehicle.model}
+                          {v.make} {v.model}
+                          {v.mechanic && ` · Mécan. ${v.mechanic.mechanic_slot}`}
                         </p>
                       </div>
-                      <span className="inline-flex shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
-                        {VEI_STATUS_LABELS[r.status] ?? r.status}
-                      </span>
-                    </div>
-                    <VeiStatusPicker
-                      status={r.status}
-                      compact
-                      disabled={busyVeiId === r.id}
-                      onChange={(status) => quickVeiStatus(r, status)}
-                    />
-                  </div>
-                  );
-                })}
+                      <StatusBadge status={v.status} />
+                    </Link>
+                  ))}
               </div>
             )}
           </section>
@@ -396,13 +248,11 @@ function StatCard({
   value,
   href,
   highlight,
-  suffix,
 }: {
   label: string;
-  value: number | string;
+  value: number;
   href: string;
   highlight?: boolean;
-  suffix?: string;
 }) {
   return (
     <Link
@@ -411,10 +261,7 @@ function StatCard({
         highlight ? "border-amber-300 bg-amber-50" : "bg-white"
       }`}
     >
-      <p className="text-2xl font-bold tracking-tight text-slate-900">
-        {value}
-        {suffix}
-      </p>
+      <p className="text-2xl font-bold tracking-tight text-slate-900">{value}</p>
       <p className="mt-1 text-xs font-medium text-slate-600">{label}</p>
     </Link>
   );

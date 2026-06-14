@@ -11,22 +11,14 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PART_STATUS_LABELS } from "@/lib/constants";
 import { MANAGER_NAV } from "@/lib/manager";
+import { ADMIN_NAV } from "@/lib/role-nav";
 import { formatEuro } from "@/lib/parts-costs";
 import { supabase } from "@/lib/supabase";
 import {
-  REPAIR_STATE_LABELS,
   fetchWorkshopSupervision,
-  formatDuration,
   formatRepairDate,
   type SupervisionVehicle,
 } from "@/lib/workshop-supervision";
-
-const ADMIN_NAV = [
-  { href: "/dashboard", label: "Tableau de bord" },
-  { href: "/dashboard/supervision", label: "Supervision atelier" },
-  { href: "/parts/costs", label: "Coûts pièces" },
-  { href: "/users", label: "Utilisateurs" },
-];
 
 export default function SupervisionPage() {
   const user = useSession();
@@ -73,7 +65,7 @@ export default function SupervisionPage() {
 
   const nav =
     user.role === "admin"
-      ? ADMIN_NAV
+      ? [...ADMIN_NAV]
       : [...MANAGER_NAV, { href: "/dashboard/supervision", label: "Supervision" }];
 
   const activeCount = rows.reduce((n, r) => n + r.activeRepairs, 0);
@@ -82,8 +74,21 @@ export default function SupervisionPage() {
     <AppShell user={user} nav={nav}>
       <PageHeader
         title="Supervision atelier"
-        subtitle="Vue complète : véhicules, problèmes, pièces, horaires de réparation"
+        subtitle="Suivi des réparations et coûts pièces — consultez les check-lists mécaniciens sur Photos et problèmes"
       />
+
+      <Link
+        href="/parts"
+        className="card-interactive mb-6 flex flex-col gap-1 border-indigo-200 bg-indigo-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <p className="font-semibold text-indigo-950">Photos et problèmes</p>
+          <p className="text-sm text-indigo-800">
+            Problèmes, photos et pièces des check-lists mécaniciens
+          </p>
+        </div>
+        <span className="text-sm font-medium text-indigo-700">Voir →</span>
+      </Link>
 
       {!loading && rows.length > 0 && (
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -148,7 +153,8 @@ export default function SupervisionPage() {
               </summary>
 
               <div className="mt-4 space-y-6 border-t border-slate-100 pt-4">
-                {(row.vehicle.repair_started_at || row.vehicle.repair_completed_at) && (
+                {user.role === "admin" &&
+                  (row.vehicle.repair_started_at || row.vehicle.repair_completed_at) && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                       <span className="text-slate-500">Réparation véhicule — début : </span>
@@ -159,80 +165,6 @@ export default function SupervisionPage() {
                       {formatRepairDate(row.vehicle.repair_completed_at)}
                     </div>
                   </div>
-                )}
-
-                {row.issues.length > 0 && (
-                  <section>
-                    <h3 className="section-title mb-3">Problèmes & réparations</h3>
-                    <div className="space-y-3">
-                      {row.issues.map((issue) => (
-                        <div
-                          key={issue.id}
-                          className="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
-                        >
-                          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                            <div>
-                              <p className="font-medium text-slate-900">
-                                {issue.checklist_label ?? "Signalement"}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-800">{issue.problem}</p>
-                              <p className="text-sm text-slate-600">
-                                Pièces : {issue.parts_needed}
-                              </p>
-                              {issue.mechanic && (
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Signalé par {issue.mechanic.full_name}
-                                </p>
-                              )}
-                            </div>
-                            <span className="shrink-0 self-start rounded-full bg-white px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
-                              {REPAIR_STATE_LABELS[issue.repairState]}
-                            </span>
-                          </div>
-
-                          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
-                            <div>
-                              <span className="text-slate-500">Début tâche</span>
-                              <p className="font-medium">
-                                {formatRepairDate(issue.repair_started_at)}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="text-slate-500">Fin tâche</span>
-                              <p className="font-medium">
-                                {formatRepairDate(issue.repair_completed_at)}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="text-slate-500">Durée</span>
-                              <p className="font-medium">
-                                {formatDuration(issue.durationMinutes)}
-                              </p>
-                            </div>
-                          </div>
-
-                          {issue.photoUrls.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {issue.photoUrls.map((src) => (
-                                <a
-                                  key={src}
-                                  href={src}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <img
-                                    src={src}
-                                    alt="Photo"
-                                    className="h-16 w-16 rounded border object-cover"
-                                  />
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
                 )}
 
                 {row.parts.length > 0 && (

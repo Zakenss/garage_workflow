@@ -9,7 +9,34 @@ import { VehicleCard } from "@/components/VehicleCard";
 import { MECHANIC_NAV } from "@/lib/role-nav";
 import { useSession } from "@/lib/session-context";
 import { supabase } from "@/lib/supabase";
-import type { Vehicle } from "@/lib/types";
+import type { Vehicle, VehicleStatus } from "@/lib/types";
+
+const ACTIVE_STATUSES: VehicleStatus[] = [
+  "diagnostic_assigned",
+  "parts_pending",
+  "validation_pending",
+  "repair_in_progress",
+];
+
+function vehicleHref(v: Vehicle): string {
+  if (v.status === "validation_pending" || v.status === "repair_in_progress") {
+    return `/vehicles/followup/${v.id}`;
+  }
+  return `/vehicles/checklist/${v.id}`;
+}
+
+function vehicleSubtitle(v: Vehicle): string {
+  switch (v.status) {
+    case "parts_pending":
+      return "Check-list soumise — en attente pièces magasin";
+    case "validation_pending":
+      return "Pièces reçues — réception, réparations & signalements";
+    case "repair_in_progress":
+      return "Réparations en cours";
+    default:
+      return "Check-list de reconditionnement";
+  }
+}
 
 export default function MyVehiclesPage() {
   const user = useSession();
@@ -22,12 +49,7 @@ export default function MyVehiclesPage() {
       .from("vehicles")
       .select("*")
       .eq("assigned_mechanic_id", user.id)
-      .in("status", [
-        "diagnostic_assigned",
-        "parts_pending",
-        "validation_pending",
-        "repair_in_progress",
-      ])
+      .in("status", ACTIVE_STATUSES)
       .order("dispatch_priority", { ascending: true, nullsFirst: false })
       .order("updated_at", { ascending: false });
     setVehicles((data as Vehicle[]) ?? []);
@@ -41,13 +63,10 @@ export default function MyVehiclesPage() {
   if (!user) return <LoadingPage />;
 
   return (
-    <AppShell
-      user={user}
-      nav={[...MECHANIC_NAV]}
-    >
+    <AppShell user={user} nav={[...MECHANIC_NAV]}>
       <PageHeader
         title="Mes véhicules"
-        subtitle="Check-list de reconditionnement — ordre défini par le chef d'atelier"
+        subtitle="Check-list initiale, puis réception pièces et réparations via Signalements"
       />
 
       {loading ? (
@@ -68,7 +87,8 @@ export default function MyVehiclesPage() {
               key={v.id}
               vehicle={v}
               showPriority
-              href={`/vehicles/checklist/${v.id}`}
+              href={vehicleHref(v)}
+              subtitle={vehicleSubtitle(v)}
             />
           ))}
         </div>
