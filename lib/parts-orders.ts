@@ -28,6 +28,12 @@ export type VehiclePartOrders = {
   receivedCount: number;
 };
 
+function vehicleFromJoin(v: unknown): PartOrderRow["vehicle"] | null {
+  if (!v) return null;
+  if (Array.isArray(v)) return (v[0] as PartOrderRow["vehicle"]) ?? null;
+  return v as PartOrderRow["vehicle"];
+}
+
 const TERMINAL_STATUSES = new Set(["received", "in_stock"]);
 
 export type VehiclePartsSummary = "awaiting_order" | "ordered" | "received";
@@ -63,7 +69,7 @@ export async function fetchStorekeeperPartOrders(): Promise<VehiclePartOrders[]>
   const byVehicle = new Map<string, VehiclePartOrders>();
 
   for (const row of data ?? []) {
-    const vehicle = row.vehicles as PartOrderRow["vehicle"] | null;
+    const vehicle = vehicleFromJoin(row.vehicles);
     if (!vehicle) continue;
 
     const part: PartOrderRow = {

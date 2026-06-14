@@ -1,8 +1,16 @@
 import { notifyRole } from "./db";
 import type { ChecklistState } from "./reconditioning-checklist";
-import { collectChecklistPartRequests, isPartsNeededText } from "./sync-checklist-parts";
+import { isPartsNeededText } from "./sync-checklist-parts";
 import { getPublicUrl, supabase } from "./supabase";
 import type { VehicleStatus } from "./types";
+
+function userNameFromJoin(v: unknown): string | null {
+  if (!v) return null;
+  const row = Array.isArray(v) ? v[0] : v;
+  if (!row || typeof row !== "object") return null;
+  const name = (row as { full_name?: string }).full_name;
+  return typeof name === "string" ? name : null;
+}
 
 export type IssueStatus = "pending_manager" | "approved" | "rejected";
 
@@ -200,11 +208,10 @@ export async function fetchSubmittedChecklistVehicles(): Promise<SubmittedCheckl
     if (!v || !row.signed_at) continue;
     const existing = byVehicle.get(v.id);
     if (existing && existing.submittedAt >= row.signed_at) continue;
-    const mechanic = row.mechanic as { full_name: string } | null;
     byVehicle.set(v.id, {
       vehicle: v,
       submittedAt: row.signed_at,
-      mechanicName: mechanic?.full_name ?? null,
+      mechanicName: userNameFromJoin(row.mechanic),
     });
   }
 

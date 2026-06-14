@@ -23,6 +23,20 @@ export type PhotosEtProblemesVehicle = {
   parts: VehiclePartsCost["parts"];
 };
 
+function vehicleFromJoin(v: unknown): PhotosEtProblemesVehicle["vehicle"] | null {
+  if (!v) return null;
+  if (Array.isArray(v)) return (v[0] as PhotosEtProblemesVehicle["vehicle"]) ?? null;
+  return v as PhotosEtProblemesVehicle["vehicle"];
+}
+
+function userNameFromJoin(v: unknown): string | null {
+  if (!v) return null;
+  const row = Array.isArray(v) ? v[0] : v;
+  if (!row || typeof row !== "object") return null;
+  const name = (row as { full_name?: string }).full_name;
+  return typeof name === "string" ? name : null;
+}
+
 function parsePartName(partName: string): { label: string; partsNeeded: string } {
   const match = partName.match(/^\[(.+?)\]\s*(.*)$/);
   if (match) {
@@ -174,14 +188,13 @@ export async function fetchPhotosEtProblemesVehicles(): Promise<PhotosEtProbleme
   const byVehicle = new Map<string, PhotosEtProblemesVehicle>();
 
   for (const row of diagnostics ?? []) {
-    const vehicle = row.vehicle as PhotosEtProblemesVehicle["vehicle"] | null;
+    const vehicle = vehicleFromJoin(row.vehicle);
     if (!vehicle || !row.signed_at) continue;
 
     const existing = byVehicle.get(vehicle.id);
     if (existing && existing.submittedAt >= row.signed_at) continue;
 
     const mechanicId = row.mechanic_id as string;
-    const mechanic = row.mechanic as { full_name: string } | null;
     const state = parseChecklistState(row.checklist_data);
 
     const fromChecklist = collectChecklistSignalements(state).map((item) =>
@@ -196,7 +209,7 @@ export async function fetchPhotosEtProblemesVehicles(): Promise<PhotosEtProbleme
     byVehicle.set(vehicle.id, {
       vehicle,
       submittedAt: row.signed_at,
-      mechanicName: mechanic?.full_name ?? null,
+      mechanicName: userNameFromJoin(row.mechanic),
       signalements: mergeSignalements(fromChecklist, fromParts),
       parts: costByVehicle.get(vehicle.id) ?? [],
     });
