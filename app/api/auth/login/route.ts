@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { SESSION_COOKIE, getRoleHome } from "@/lib/auth";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, getRoleHome } from "@/lib/auth";
 import type { SessionUser } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -38,9 +38,7 @@ export async function POST(request: Request) {
   });
 
   response.cookies.set(SESSION_COOKIE, JSON.stringify(session), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
+    ...SESSION_COOKIE_OPTIONS,
     maxAge: 60 * 60 * 24 * 7,
   });
 

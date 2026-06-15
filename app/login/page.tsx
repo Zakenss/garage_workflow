@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/Alert";
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -22,15 +21,17 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Erreur de connexion");
+        setLoading(false);
         return;
       }
-      const to = searchParams.get("from") || data.redirect;
-      router.push(to);
-      router.refresh();
-    } finally {
+      const to = searchParams.get("from") || data.redirect || "/";
+      // Full navigation so the session cookie is picked up by the server layout.
+      window.location.assign(to);
+    } catch {
+      setError("Impossible de contacter le serveur. Réessayez.");
       setLoading(false);
     }
   }

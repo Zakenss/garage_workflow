@@ -1,5 +1,6 @@
 export const SECRETARY_NAV = [
   { href: "/vehicles/arrivals", label: "Arrivées" },
+  { href: "/vehicles/manage", label: "Gestion véhicules" },
   { href: "/vehicles/tracking", label: "Suivi véhicules" },
 ] as const;
 

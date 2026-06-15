@@ -3,6 +3,12 @@ import { ROLE_HOME } from "./constants";
 
 export const SESSION_COOKIE = "garage_session";
 
+export const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+};
+
 export function getRoleHome(role: UserRole): string {
   return ROLE_HOME[role];
 }
@@ -23,7 +29,7 @@ export function canAccess(role: UserRole, path: string): boolean {
   if (path.startsWith("/login")) return true;
 
   const rules: Partial<Record<UserRole, string[]>> = {
-    secretary: ["/vehicles/arrivals", "/vehicles/tracking", "/vehicles/"],
+    secretary: ["/vehicles/arrivals", "/vehicles/manage", "/vehicles/tracking", "/vehicles/"],
     workshop_manager: [
       "/dashboard",
       "/workshop/reception",

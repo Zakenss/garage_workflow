@@ -1,4 +1,5 @@
 import { addTimeline, notifyUser, updateVehicleStatus } from "./db";
+import { isVeiCaseComplete } from "./manager-pipeline";
 import { supabase } from "./supabase";
 import type { SessionUser } from "./types";
 
@@ -34,6 +35,25 @@ export async function assignVehicleToMechanic(
   } = {}
 ) {
   const plate = options.licensePlate ?? "véhicule";
+
+  const { data: vehicleRow } = await supabase
+    .from("vehicles")
+    .select("vei_procedure")
+    .eq("id", vehicleId)
+    .single();
+
+  if (vehicleRow?.vei_procedure && !options.isReassign) {
+    const { data: veiCase } = await supabase
+      .from("vei_cases")
+      .select("status, expert_name")
+      .eq("vehicle_id", vehicleId)
+      .maybeSingle();
+    if (!isVeiCaseComplete(veiCase)) {
+      throw new Error(
+        "Expertise VEI non finalisée — confirmez la réalisation et l'expert avant assignation."
+      );
+    }
+  }
 
   if (options.isReassign) {
     await supabase
@@ -107,6 +127,17 @@ export async function updateVeiStatus(
   user: SessionUser,
   vehicleId: string
 ) {
+  if (status === "completed") {
+    const { data: veiCase } = await supabase
+      .from("vei_cases")
+      .select("expert_name")
+      .eq("id", veiCaseId)
+      .single();
+    if (!veiCase?.expert_name?.trim()) {
+      throw new Error("Indiquez le nom de l'expert avant de confirmer la VEI réalisée.");
+    }
+  }
+
   const { error } = await supabase
     .from("vei_cases")
     .update({ status })
@@ -114,6 +145,85 @@ export async function updateVeiStatus(
   if (error) throw error;
 
   await addTimeline(vehicleId, user.id, "vei_status_change", { status });
+}
+
+export type VeiCaseInput = {
+  expert_name: string;
+  appointment_date: string;
+  appointment_time: string;
+  notes: string;
+  status: VeiStatus;
+};
+
+export async function saveVeiCaseDetails(
+  veiCaseId: string,
+  vehicleId: string,
+  user: SessionUser,
+  input: VeiCaseInput
+) {
+  if (input.status === "completed" && !input.expert_name.trim()) {
+    throw new Error("Le nom de l'expert est requis pour confirmer la VEI réalisée.");
+  }
+
+  const { error } = await supabase
+    .from("vei_cases")
+    .update({
+      expert_name: input.expert_name.trim() || null,
+      appointment_date: input.appointment_date || null,
+      appointment_time: input.appointment_time || null,
+      notes: input.notes.trim() || null,
+      status: input.status,
+    })
+    .eq("id", veiCaseId);
+  if (error) throw error;
+
+  await addTimeline(vehicleId, user.id, "vei_updated", {
+    status: input.status,
+    expert_name: input.expert_name.trim() || null,
+  });
+}
+
+export async function sendVehicleToWorkshop(
+  vehicleId: string,
+  user: SessionUser,
+  input: { vin: string; workshop_notes: string | null }
+) {
+  const { data: vehicle } = await supabase
+    .from("vehicles")
+    .select("status, vei_procedure")
+    .eq("id", vehicleId)
+    .single();
+
+  if (!vehicle) throw new Error("Véhicule introuvable.");
+  if (vehicle.status !== "arrived" && vehicle.status !== "in_workshop") {
+    throw new Error("Ce véhicule n'est plus en phase de réception.");
+  }
+
+  if (vehicle.vei_procedure) {
+    const { data: veiCase } = await supabase
+      .from("vei_cases")
+      .select("status, expert_name")
+      .eq("vehicle_id", vehicleId)
+      .maybeSingle();
+    if (!isVeiCaseComplete(veiCase)) {
+      throw new Error(
+        "Expertise VEI non finalisée — statut « Réalisé » et expert requis."
+      );
+    }
+  }
+
+  await supabase
+    .from("vehicles")
+    .update({
+      vin: input.vin.trim(),
+      workshop_notes: input.workshop_notes,
+      sent_to_workshop_at: new Date().toISOString(),
+    })
+    .eq("id", vehicleId);
+
+  if (vehicle.status === "arrived") {
+    await updateVehicleStatus(vehicleId, "in_workshop", user);
+  }
 }
 
 export async function saveMechanicQueueOrder(vehicleIds: string[]) {

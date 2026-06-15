@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/auth";
+
+function clearSessionCookie(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE, "", {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: 0,
+  });
+}
+
+export async function GET(request: Request) {
+  const response = NextResponse.redirect(new URL("/login", request.url));
+  clearSessionCookie(response);
+  return response;
+}
 
 export async function POST() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  clearSessionCookie(response);
   return response;
 }

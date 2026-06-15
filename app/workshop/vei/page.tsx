@@ -10,13 +10,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { VeiStatusPicker } from "@/components/VeiStatusPicker";
 import { VEI_STATUS_LABELS } from "@/lib/constants";
-import { updateVeiStatus, type VeiStatus } from "@/lib/manager-actions";
 import {
-  fetchArrivedReceptionStates,
+  fetchManagerVehicleSearch,
+  fetchReceptionCompleteByVehicleIds,
   isReceptionComplete,
-  isVeiReadyForWorkshop,
+  isVeiCaseComplete,
 } from "@/lib/manager-pipeline";
 import { MANAGER_NAV } from "@/lib/manager";
 import { supabase } from "@/lib/supabase";
@@ -29,6 +28,7 @@ type VeiRow = {
   appointment_date: string | null;
   appointment_time: string | null;
   notes: string | null;
+  vehicle_id: string;
   vehicles: {
     id: string;
     license_plate: string;
@@ -36,44 +36,68 @@ type VeiRow = {
     model: string;
     status: VehicleStatus;
     vei_procedure: boolean;
+    vin: string | null;
   };
   receptionComplete: boolean;
+  veiComplete: boolean;
 };
+
+function vehicleFromJoin(v: unknown): VeiRow["vehicles"] | null {
+  if (!v) return null;
+  if (Array.isArray(v)) return (v[0] as VeiRow["vehicles"]) ?? null;
+  return v as VeiRow["vehicles"];
+}
 
 export default function VeiListPage() {
   const user = useSession();
   const [rows, setRows] = useState<VeiRow[]>([]);
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"pending" | "ready" | "all">("pending");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [receptionStates, veiRes] = await Promise.all([
-      fetchArrivedReceptionStates(),
-      supabase
-        .from("vei_cases")
-        .select(
-          "id, status, expert_name, appointment_date, appointment_time, notes, vehicles(id, license_plate, make, model, status, vei_procedure)"
-        )
-        .order("updated_at", { ascending: false }),
-    ]);
+    const { data: veiData } = await supabase
+      .from("vei_cases")
+      .select(
+        "id, status, expert_name, appointment_date, appointment_time, notes, vehicle_id, vehicles(id, license_plate, make, model, status, vei_procedure, vin)"
+      )
+      .order("updated_at", { ascending: false });
 
-    const receptionByVehicle = new Map(
-      receptionStates.map((v) => [v.id, isReceptionComplete(v, v.exteriorPhotoCount)])
-    );
-
-    let list = ((veiRes.data as unknown as Omit<VeiRow, "receptionComplete">[]) ?? []).map(
-      (row) => ({
-        ...row,
-        receptionComplete: receptionByVehicle.get(row.vehicles.id) ?? false,
+    let list: VeiRow[] = (veiData ?? [])
+      .map((row) => {
+        const vehicles = vehicleFromJoin(row.vehicles);
+        if (!vehicles) return null;
+        const veiComplete = isVeiCaseComplete({
+          status: row.status,
+          expert_name: row.expert_name,
+        });
+        return {
+          id: row.id,
+          status: row.status,
+          expert_name: row.expert_name,
+          appointment_date: row.appointment_date,
+          appointment_time: row.appointment_time,
+          notes: row.notes,
+          vehicle_id: row.vehicle_id,
+          vehicles,
+          receptionComplete: false,
+          veiComplete,
+        };
       })
+      .filter((r): r is VeiRow => r !== null);
+
+    const receptionByVehicle = await fetchReceptionCompleteByVehicleIds(
+      list.map((r) => r.vehicles.id)
     );
+    list = list.map((row) => ({
+      ...row,
+      receptionComplete: receptionByVehicle.get(row.vehicles.id) ?? false,
+    }));
 
     if (filter === "pending") {
-      list = list.filter(
-        (row) =>
-          row.vehicles.status === "arrived" && !isVeiReadyForWorkshop(row.status)
-      );
+      list = list.filter((row) => !row.veiComplete);
+    } else if (filter === "ready") {
+      list = list.filter((row) => row.veiComplete);
     }
 
     setRows(list);
@@ -105,33 +129,54 @@ export default function VeiListPage() {
     };
   }, [filter]);
 
-  async function changeStatus(row: VeiRow, status: VeiStatus) {
-    if (!user || row.status === status) return;
-    setBusyId(row.id);
-    try {
-      await updateVeiStatus(row.id, status, user, row.vehicles.id);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   if (!user) return <LoadingPage />;
+
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? rows.filter(
+        (r) =>
+          r.vehicles.license_plate.toLowerCase().includes(query) ||
+          r.vehicles.make.toLowerCase().includes(query) ||
+          r.vehicles.model.toLowerCase().includes(query) ||
+          (r.expert_name?.toLowerCase().includes(query) ?? false)
+      )
+    : rows;
 
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
       <PageHeader
         title="Expertises VEI"
-        subtitle="Étape 2 — après réception complète. Planifiez ou réalisez l'expertise avant l'assignation."
+        subtitle="Gérez chaque dossier VEI — le mécanicien ne voit le véhicule qu'après expertise réalisée et expert confirmé."
       />
 
-      <div className="mb-6 flex gap-2">
+      <Alert variant="info" className="mb-6">
+        Parcours VEI : réception complète → expertise planifiée/réalisée avec expert →
+        assignation mécanicien.
+      </Alert>
+
+      <input
+        type="search"
+        className="input-field mb-4"
+        placeholder="Rechercher immatriculation, expert…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        aria-label="Rechercher un dossier VEI"
+      />
+
+      <div className="mb-6 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setFilter("pending")}
           className={filter === "pending" ? "btn-chip-active" : "btn-chip-inactive"}
         >
-          En attente
+          En cours
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter("ready")}
+          className={filter === "ready" ? "btn-chip-active" : "btn-chip-inactive"}
+        >
+          Finalisées
         </button>
         <button
           type="button"
@@ -148,24 +193,27 @@ export default function VeiListPage() {
             <div key={i} className="skeleton h-28 rounded-xl" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
-          title={filter === "pending" ? "Aucune expertise VEI en attente" : "Aucun dossier VEI"}
+          title="Aucun dossier VEI"
           description={
             filter === "pending"
-              ? "Tous les véhicules VEI en attente d'expertise par le chef d'atelier."
+              ? "Toutes les expertises VEI en cours sont finalisées."
               : undefined
           }
         />
       ) : (
         <div className="space-y-3">
-          {rows.map((r) => (
-            <div key={r.id} className="card-padded space-y-4">
-              {!r.receptionComplete && r.vehicles.status === "arrived" && (
+          {filtered.map((r) => (
+            <div key={r.id} className="card-padded space-y-3">
+              {!r.receptionComplete && (
                 <Alert variant="info">
                   Réception incomplète —{" "}
-                  <Link href={`/workshop/reception/${r.vehicles.id}`} className="font-medium underline">
-                    terminer la réception d&apos;abord
+                  <Link
+                    href={`/workshop/reception/${r.vehicles.id}`}
+                    className="font-medium underline"
+                  >
+                    terminer la réception
                   </Link>
                   .
                 </Alert>
@@ -173,7 +221,7 @@ export default function VeiListPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <Link
-                    href={`/workshop/reception/${r.vehicles.id}`}
+                    href={`/workshop/vei/${r.vehicles.id}`}
                     className="font-semibold text-slate-900 hover:underline"
                   >
                     {r.vehicles.license_plate}
@@ -181,27 +229,33 @@ export default function VeiListPage() {
                   <p className="text-sm text-slate-600">
                     {r.vehicles.make} {r.vehicles.model}
                   </p>
-                  {(r.expert_name || r.appointment_date) && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {r.expert_name && `Expert : ${r.expert_name}`}
-                      {r.appointment_date && ` · ${r.appointment_date}`}
-                      {r.appointment_time && ` ${r.appointment_time.slice(0, 5)}`}
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    {r.expert_name ? `Expert : ${r.expert_name}` : "Expert non renseigné"}
+                    {r.appointment_date && ` · ${r.appointment_date}`}
+                    {r.appointment_time && ` ${r.appointment_time.slice(0, 5)}`}
+                  </p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
-                    {VEI_STATUS_LABELS[r.status] ?? r.status}
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                      r.veiComplete
+                        ? "bg-emerald-100 text-emerald-900"
+                        : "bg-amber-100 text-amber-900"
+                    }`}
+                  >
+                    {r.veiComplete
+                      ? "VEI finalisée"
+                      : (VEI_STATUS_LABELS[r.status] ?? r.status)}
                   </span>
                   <StatusBadge status={r.vehicles.status} />
                 </div>
               </div>
-
-              <VeiStatusPicker
-                status={r.status}
-                disabled={busyId === r.id}
-                onChange={(status) => changeStatus(r, status)}
-              />
+              <Link
+                href={`/workshop/vei/${r.vehicles.id}`}
+                className="inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
+              >
+                Gérer le dossier VEI →
+              </Link>
             </div>
           ))}
         </div>

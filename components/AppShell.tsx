@@ -18,13 +18,9 @@ export function AppShell({
 }) {
   const pathname = usePathname();
 
-  async function logout() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
-      // Full navigation avoids stale webpack chunks after long dev sessions
-      window.location.href = "/login";
-    }
+  function logout() {
+    // Server redirect clears the session cookie and lands on /login in one step.
+    window.location.href = "/api/auth/logout";
   }
 
   return (

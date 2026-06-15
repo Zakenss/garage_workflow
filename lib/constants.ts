@@ -73,9 +73,12 @@ export const PART_STATUSES = ["in_stock", "to_order", "ordered", "received"] as 
 
 export const TIMELINE_LABELS: Record<string, string> = {
   vehicle_arrived: "Véhicule enregistré à l'arrivée",
+  vehicle_updated: "Fiche véhicule modifiée",
+  vehicle_deleted: "Véhicule supprimé",
   mechanic_assigned: "Mécanicien assigné",
   mechanic_reassigned: "Mécanicien changé",
   vei_status_change: "Statut VEI mis à jour",
+  vei_updated: "Dossier VEI modifié",
   status_change: "Changement de statut",
   followup_repair_started: "Réparation complémentaire démarrée",
   followup_repair_completed: "Réparation complémentaire terminée",
