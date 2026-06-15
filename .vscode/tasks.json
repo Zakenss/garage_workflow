@@ -4,6 +4,27 @@
     {
       "label": "Dev server (Next.js)",
       "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "next",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Starting.*",
+          "endsPattern": ".*Ready in.*"
+        }
+      }
+    },
+    {
+      "label": "Dev server (clean cache)",
+      "type": "shell",
       "command": "npm run dev:clean",
       "isBackground": true,
       "presentation": {
@@ -20,9 +41,6 @@
           "beginsPattern": ".*Starting.*",
           "endsPattern": ".*Ready in.*"
         }
-      },
-      "runOptions": {
-        "runOn": "folderOpen"
       }
     }
   ]
