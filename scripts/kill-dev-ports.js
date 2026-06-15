@@ -13,8 +13,8 @@ const PORTS = [3000, 3001, 3002, 3003, 3004];
 function killProjectDevProcessesWin() {
   try {
     const script =
-      "Get-CimInstance Win32_Process -Filter \"name='node.exe'\" | " +
-      `Where-Object { $_.CommandLine -match '${PROJECT_SLUG}' -and $_.CommandLine -match 'next' } | ` +
+      "Get-CimInstance Win32_Process | " +
+      `Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match '${PROJECT_SLUG}' -and $_.CommandLine -match 'next' } | ` +
       "ForEach-Object { $_.ProcessId }";
     const out = execSync(`powershell -NoProfile -Command "${script}"`, { encoding: "utf8" });
     for (const line of out.split(/\r?\n/)) {
