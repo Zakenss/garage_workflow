@@ -260,9 +260,6 @@ export default function VeiDetailPage() {
           <button type="submit" disabled={saving} className="btn-primary">
             {saving ? "Enregistrement…" : "Enregistrer le dossier VEI"}
           </button>
-          <Link href={`/workshop/reception/${vehicleId}`} className="btn-secondary inline-flex items-center">
-            Modifier la réception
-          </Link>
         </div>
       </form>
 

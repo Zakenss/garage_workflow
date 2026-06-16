@@ -6,6 +6,7 @@ import {
 } from "./manager";
 import { supabase } from "./supabase";
 import type { Vehicle, VehicleStatus } from "./types";
+import { dedupeById } from "./nav-utils";
 
 export type VehicleWithMechanic = Vehicle & {
   mechanic: { id: string; full_name: string; mechanic_slot: number | null } | null;
@@ -49,7 +50,7 @@ export async function fetchWaitingVehicles(): Promise<Vehicle[]> {
     console.error("fetchWaitingVehicles:", error.message);
     return [];
   }
-  return sortByDispatchPriority((data as Vehicle[]) ?? []);
+  return sortByDispatchPriority(dedupeById((data as Vehicle[]) ?? []));
 }
 
 export async function fetchAssignedVehicles(): Promise<VehicleWithMechanic[]> {
@@ -63,7 +64,7 @@ export async function fetchAssignedVehicles(): Promise<VehicleWithMechanic[]> {
     console.error("fetchAssignedVehicles:", error.message);
     return [];
   }
-  return sortByDispatchPriority((data as VehicleWithMechanic[]) ?? []);
+  return sortByDispatchPriority(dedupeById((data as VehicleWithMechanic[]) ?? []));
 }
 
 export async function fetchAllWorkshopVehicles(): Promise<VehicleWithMechanic[]> {
@@ -77,21 +78,21 @@ export async function fetchAllWorkshopVehicles(): Promise<VehicleWithMechanic[]>
     console.error("fetchAllWorkshopVehicles:", error.message);
     return [];
   }
-  return sortByDispatchPriority((data as VehicleWithMechanic[]) ?? []);
+  return sortByDispatchPriority(dedupeById((data as VehicleWithMechanic[]) ?? []));
 }
 
 export async function fetchRepairCompleteVehicles(): Promise<VehicleWithMechanic[]> {
   const { data, error } = await supabase
     .from("vehicles")
     .select("*, mechanic:users!assigned_mechanic_id(id, full_name, mechanic_slot)")
-    .eq("status", WORKSHOP_REPAIR_COMPLETE_STATUS)
+    .in("status", [WORKSHOP_REPAIR_COMPLETE_STATUS, "bodywork_complete"])
     .order("repair_completed_at", { ascending: false });
 
   if (error) {
     console.error("fetchRepairCompleteVehicles:", error.message);
     return [];
   }
-  return (data as VehicleWithMechanic[]) ?? [];
+  return dedupeById((data as VehicleWithMechanic[]) ?? []);
 }
 
 export async function fetchAssignmentHistory(

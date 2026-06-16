@@ -1,5 +1,8 @@
 import { addTimeline, notifyUser, updateVehicleStatus } from "./db";
-import { isVeiCaseComplete } from "./manager-pipeline";
+import {
+  fetchReceptionCompleteByVehicleIds,
+  isVeiCaseComplete,
+} from "./manager-pipeline";
 import { supabase } from "./supabase";
 import type { SessionUser } from "./types";
 
@@ -199,6 +202,11 @@ export async function sendVehicleToWorkshop(
     throw new Error("Ce véhicule n'est plus en phase de réception.");
   }
 
+  const receptionByVehicle = await fetchReceptionCompleteByVehicleIds([vehicleId]);
+  if (!receptionByVehicle.get(vehicleId)) {
+    throw new Error("Réception incomplète — VIN / série et 4 photos extérieures requis.");
+  }
+
   if (vehicle.vei_procedure) {
     const { data: veiCase } = await supabase
       .from("vei_cases")
@@ -217,6 +225,7 @@ export async function sendVehicleToWorkshop(
     .update({
       vin: input.vin.trim(),
       workshop_notes: input.workshop_notes,
+      serial_confirmed: true,
       sent_to_workshop_at: new Date().toISOString(),
     })
     .eq("id", vehicleId);

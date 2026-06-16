@@ -1,6 +1,6 @@
 import { supabase, getPublicUrl } from "./supabase";
 import type { Vehicle } from "./types";
-
+import { dedupeById } from "./nav-utils";
 export type VehicleReceptionState = Vehicle & {
   exteriorPhotoCount: number;
 };
@@ -13,10 +13,43 @@ export type ReceptionPhoto = {
 };
 
 export function isReceptionComplete(
-  vehicle: Pick<Vehicle, "vin">,
+  vehicle: Pick<Vehicle, "vin"> & { serial_confirmed?: boolean },
   exteriorPhotoCount: number
 ): boolean {
+  if (vehicle.serial_confirmed) return true;
   return Boolean(vehicle.vin?.trim()) && exteriorPhotoCount >= 4;
+}
+
+/** Read VIN + exterior photo count from DB for one vehicle. */
+export async function fetchReceptionState(vehicleId: string): Promise<{
+  vin: string | null;
+  serial_confirmed: boolean;
+  exteriorPhotoCount: number;
+  complete: boolean;
+}> {
+  const { data: vehicle } = await supabase
+    .from("vehicles")
+    .select("vin, serial_confirmed")
+    .eq("id", vehicleId)
+    .single();
+
+  const { count } = await supabase
+    .from("vehicle_photos")
+    .select("*", { count: "exact", head: true })
+    .eq("vehicle_id", vehicleId)
+    .eq("photo_type", "exterior");
+
+  const exteriorPhotoCount = count ?? 0;
+  const row = {
+    vin: vehicle?.vin ?? null,
+    serial_confirmed: Boolean(vehicle?.serial_confirmed),
+  };
+
+  return {
+    ...row,
+    exteriorPhotoCount,
+    complete: isReceptionComplete(row, exteriorPhotoCount),
+  };
 }
 
 /** Batch reception-complete check for any vehicle ids (e.g. VEI list). */
@@ -28,7 +61,7 @@ export async function fetchReceptionCompleteByVehicleIds(
 
   const { data: vehicles } = await supabase
     .from("vehicles")
-    .select("id, vin")
+    .select("id, vin, serial_confirmed")
     .in("id", vehicleIds);
 
   const { data: photos } = await supabase
@@ -43,7 +76,13 @@ export async function fetchReceptionCompleteByVehicleIds(
   }
 
   for (const v of vehicles ?? []) {
-    result.set(v.id, isReceptionComplete({ vin: v.vin }, counts.get(v.id) ?? 0));
+    result.set(
+      v.id,
+      isReceptionComplete(
+        { vin: v.vin, serial_confirmed: Boolean(v.serial_confirmed) },
+        counts.get(v.id) ?? 0
+      )
+    );
   }
   return result;
 }
@@ -91,10 +130,12 @@ async function attachExteriorPhotoCounts(
     counts.set(row.vehicle_id, (counts.get(row.vehicle_id) ?? 0) + 1);
   }
 
-  return list.map((vehicle) => ({
-    ...vehicle,
-    exteriorPhotoCount: counts.get(vehicle.id) ?? 0,
-  }));
+  return dedupeById(
+    list.map((vehicle) => ({
+      ...vehicle,
+      exteriorPhotoCount: counts.get(vehicle.id) ?? 0,
+    }))
+  );
 }
 
 /** List vehicles for manager reception: pipeline, full browse, or search. */
@@ -163,12 +204,12 @@ export function needsVeiBeforeWorkshop(vehicle: Pick<Vehicle, "vei_procedure">):
   return vehicle.vei_procedure;
 }
 
-/** Vehicles in reception pipeline: arrived, or sent to workshop but not yet assigned. */
+/** Vehicles in reception pipeline: newly arrived, not yet sent to the workshop queue. */
 export async function fetchReceptionPipelineVehicles(): Promise<VehicleReceptionState[]> {
   const { data: vehicles, error } = await supabase
     .from("vehicles")
     .select("*")
-    .or("status.eq.arrived,and(status.eq.in_workshop,assigned_mechanic_id.is.null)")
+    .eq("status", "arrived")
     .order("arrival_date", { ascending: false });
 
   if (error) {
@@ -191,10 +232,12 @@ export async function fetchReceptionPipelineVehicles(): Promise<VehicleReception
     counts.set(row.vehicle_id, (counts.get(row.vehicle_id) ?? 0) + 1);
   }
 
-  return list.map((vehicle) => ({
-    ...vehicle,
-    exteriorPhotoCount: counts.get(vehicle.id) ?? 0,
-  }));
+  return dedupeById(
+    list.map((vehicle) => ({
+      ...vehicle,
+      exteriorPhotoCount: counts.get(vehicle.id) ?? 0,
+    }))
+  );
 }
 
 /** @deprecated use fetchReceptionPipelineVehicles */
@@ -243,4 +286,18 @@ export async function fetchManagerPipelineCounts(): Promise<{
   }
 
   return { pendingReception, pendingVei };
+}
+
+/** Vehicles repaired, awaiting manager validation before ready_to_sell. */
+export async function fetchPendingFinalValidationCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("vehicles")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["repair_complete", "bodywork_complete"]);
+
+  if (error) {
+    console.error("fetchPendingFinalValidationCount:", error.message);
+    return 0;
+  }
+  return count ?? 0;
 }

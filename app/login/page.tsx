@@ -88,7 +88,7 @@ export default function LoginPage() {
         </button>
 
         <p className="mt-6 text-center text-xs leading-relaxed text-slate-400">
-          Démo : manager / 1234 · secretary / 1234 · mechanic1 / 1234
+          Démo : manager / 1234 · secretary / 1234 · mechanic1 / 1234 · seller / 1234
         </p>
       </form>
     </div>

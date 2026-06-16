@@ -1,10 +1,8 @@
 import type { VehicleStatus } from "./types";
 
+/** Primary manager navigation — pipeline stages are reached from the dashboard stat cards. */
 export const MANAGER_NAV = [
   { href: "/dashboard", label: "Tableau de bord" },
-  { href: "/workshop/reception", label: "Réception" },
-  { href: "/workshop/vei", label: "Expertises VEI" },
-  { href: "/workshop/in-workshop", label: "Atelier" },
   { href: "/vehicles/tracking", label: "Suivi" },
   { href: "/workshop/queue", label: "Priorités" },
   { href: "/parts", label: "Photos et problèmes" },

@@ -56,6 +56,15 @@ export interface Vehicle {
   notes: string | null;
   workshop_notes: string | null;
   sale_notes: string | null;
+  washed_at?: string | null;
+  ready_at?: string | null;
+  listed_at?: string | null;
+  reserved_at?: string | null;
+  sold_at?: string | null;
+  seller_expert_name?: string | null;
+  seller_expert_date?: string | null;
+  seller_expert_time?: string | null;
+  serial_confirmed?: boolean;
   assigned_mechanic_id: string | null;
   assigned_bodyworker_id: string | null;
   dispatch_priority: number | null;

@@ -79,7 +79,7 @@ export const REPAIR_STATE_LABELS: Record<IssueRepairState, string> = {
   rejected: "Refusé",
 };
 
-async function fetchPartsForVehicle(
+export async function fetchPartsForVehicle(
   vehicleId: string
 ): Promise<(IssuePartInfo & { notes?: string | null })[]> {
   const { data, error } = await supabase
@@ -283,4 +283,7 @@ export async function completeIssueRepair(
   });
   await notifyRole("workshop_manager", "followup_repair_completed", msg, issue.vehicle_id);
   await notifyRole("admin", "followup_repair_completed", msg, issue.vehicle_id);
+
+  const { tryAutoCompleteVehicleReconditioning } = await import("./vehicle-repair-complete");
+  await tryAutoCompleteVehicleReconditioning(issue.vehicle_id, user);
 }

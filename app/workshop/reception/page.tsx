@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { MANAGER_NAV } from "@/lib/manager";
 import {
   fetchManagerReceptionList,
-  isReceptionComplete,
+  fetchReceptionCompleteByVehicleIds,
   type ManagerReceptionListMode,
 } from "@/lib/manager-pipeline";
 import { STATUS_LABELS } from "@/lib/constants";
@@ -21,13 +21,14 @@ import { supabase } from "@/lib/supabase";
 type ReceptionRow = Awaited<ReturnType<typeof fetchManagerReceptionList>>[number] & {
   veiStatus?: string | null;
   veiExpert?: string | null;
+  receptionComplete?: boolean;
 };
 
 const MODES: { id: ManagerReceptionListMode; label: string; hint: string }[] = [
   {
     id: "pipeline",
     label: "En cours",
-    hint: "Arrivées et véhicules en attente d'assignation",
+    hint: "Arrivées en attente de fiche réception (avant envoi à l'atelier)",
   },
   {
     id: "all",
@@ -59,6 +60,8 @@ export default function ReceptionListPage() {
       }
     }
 
+    const receptionByVehicle = await fetchReceptionCompleteByVehicleIds(rows.map((v) => v.id));
+
     setVehicles(
       rows.map((vehicle) => {
         const vei = veiByVehicle.get(vehicle.id);
@@ -66,6 +69,7 @@ export default function ReceptionListPage() {
           ...vehicle,
           veiStatus: vei?.status ?? null,
           veiExpert: vei?.expert_name ?? null,
+          receptionComplete: receptionByVehicle.get(vehicle.id) ?? false,
         };
       })
     );
@@ -73,13 +77,10 @@ export default function ReceptionListPage() {
   }
 
   useEffect(() => {
-    load(mode, search);
-  }, [mode]);
-
-  useEffect(() => {
-    const t = setTimeout(() => load(mode, search), 300);
+    const delay = search.trim() ? 300 : 0;
+    const t = setTimeout(() => load(mode, search), delay);
     return () => clearTimeout(t);
-  }, [search, mode]);
+  }, [mode, search]);
 
   useEffect(() => {
     const ch = supabase
@@ -160,7 +161,7 @@ export default function ReceptionListPage() {
       ) : (
         <div className="space-y-3">
           {vehicles.map((v) => {
-            const receptionDone = isReceptionComplete(v, v.exteriorPhotoCount);
+            const receptionDone = v.receptionComplete ?? false;
 
             return (
               <Link

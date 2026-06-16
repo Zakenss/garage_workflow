@@ -20,6 +20,7 @@ import {
 } from "@/lib/reconditioning-checklist";
 import { syncChecklistPartsToDb } from "@/lib/sync-checklist-parts";
 import { syncChecklistToReportedIssues } from "@/lib/mechanic-issues";
+import { completeVehicleReconditioning } from "@/lib/vehicle-repair-complete";
 import type { Vehicle } from "@/lib/types";
 
 export default function ReconditioningChecklistPage() {
@@ -194,41 +195,14 @@ export default function ReconditioningChecklistPage() {
       const state = checklistRef.current;
       await persistChecklist(state);
       await publishSignalements(state);
-
-      const { data: existing } = await supabase
-        .from("repairs")
-        .select("id")
-        .eq("vehicle_id", vehicleId)
-        .maybeSingle();
-
-      const payload = {
-        vehicle_id: vehicleId,
-        mechanic_id: user.id,
-        status: "completed",
-        completed_at: new Date().toISOString(),
-      };
-
-      if (existing) {
-        await supabase.from("repairs").update(payload).eq("id", existing.id);
-      } else {
-        await supabase.from("repairs").insert({
-          ...payload,
-          started_at: new Date().toISOString(),
-        });
-      }
-
-      await updateVehicleStatus(vehicleId, "repair_complete", user, {
-        repair_completed_at: new Date().toISOString(),
-      });
-      await notifyRole(
-        "workshop_manager",
-        "repair_complete",
-        `Reconditionnement terminé — ${vehicle.license_plate}`,
-        vehicleId
-      );
+      await completeVehicleReconditioning(vehicleId, user);
       router.push("/vehicles/my");
-    } catch {
-      setError("Impossible de terminer le reconditionnement.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de terminer le reconditionnement."
+      );
     } finally {
       setSubmitting(false);
     }

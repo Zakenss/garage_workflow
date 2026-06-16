@@ -11,15 +11,12 @@ import { MechanicSlotButtons } from "@/components/MechanicSlotButtons";
 import {
   MANAGER_NAV,
   WORKSHOP_ASSIGNED_STATUSES,
-  WORKSHOP_WAITING_STATUS,
 } from "@/lib/manager";
 import { assignVehicleToMechanic } from "@/lib/manager-actions";
-import { fetchManagerPipelineCounts } from "@/lib/manager-pipeline";
-import { fetchPendingIssues } from "@/lib/mechanic-issues";
+import { fetchManagerPipelineCounts, fetchPendingFinalValidationCount } from "@/lib/manager-pipeline";
 import { supabase } from "@/lib/supabase";
 import {
-  fetchAllWorkshopVehicles,
-  fetchRepairCompleteVehicles,
+  fetchAssignedVehicles,
   fetchWaitingVehicles,
 } from "@/lib/workshop-vehicles";
 import type { SessionUser, User, Vehicle } from "@/lib/types";
@@ -30,29 +27,26 @@ type VehicleWithMechanic = Vehicle & {
 
 export function ManagerDashboard({ user }: { user: SessionUser }) {
   const [waiting, setWaiting] = useState<Vehicle[]>([]);
-  const [inWorkshop, setInWorkshop] = useState<VehicleWithMechanic[]>([]);
-  const [completed, setCompleted] = useState<VehicleWithMechanic[]>([]);
+  const [assigned, setAssigned] = useState<VehicleWithMechanic[]>([]);
   const [mechanics, setMechanics] = useState<User[]>([]);
-  const [pendingSignalements, setPendingSignalements] = useState(0);
   const [pendingReception, setPendingReception] = useState(0);
   const [pendingVei, setPendingVei] = useState(0);
+  const [pendingFinalValidation, setPendingFinalValidation] = useState(0);
   const [busySlot, setBusySlot] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [workshopData, waitingList, completedList, pending, pipeline] = await Promise.all([
-      fetchAllWorkshopVehicles(),
+    const [waitingList, assignedList, pipeline, finalValidationCount] = await Promise.all([
       fetchWaitingVehicles(),
-      fetchRepairCompleteVehicles(),
-      fetchPendingIssues(),
+      fetchAssignedVehicles(),
       fetchManagerPipelineCounts(),
+      fetchPendingFinalValidationCount(),
     ]);
-    setInWorkshop(workshopData);
     setWaiting(waitingList);
-    setCompleted(completedList);
-    setPendingSignalements(pending.length);
+    setAssigned(assignedList);
     setPendingReception(pipeline.pendingReception);
     setPendingVei(pipeline.pendingVei);
+    setPendingFinalValidation(finalValidationCount);
 
     const { data: mechanicsData } = await supabase
       .from("users")
@@ -71,11 +65,6 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "vehicles" },
-        () => load()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "mechanic_reported_issues" },
         () => load()
       )
       .on(
@@ -107,13 +96,13 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
     }
   }
 
-  const activeCount = inWorkshop.filter((v) => v.status !== WORKSHOP_WAITING_STATUS).length;
+  const activeCount = assigned.length;
 
   return (
     <AppShell user={user} nav={[...MANAGER_NAV]}>
       <PageHeader title="Tableau de bord" subtitle="Vue d'ensemble atelier" />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
           label="Réception"
           value={pendingReception}
@@ -134,25 +123,12 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
         />
         <StatCard label="En atelier" value={activeCount} href="/workshop/in-workshop" />
         <StatCard
-          label="Signalements"
-          value={pendingSignalements}
-          href="/workshop/issues"
-          highlight={pendingSignalements > 0}
+          label="Validation finale"
+          value={pendingFinalValidation}
+          href="/workshop/final"
+          highlight={pendingFinalValidation > 0}
         />
-        <StatCard label="Terminé" value={completed.length} href="/workshop/termine" />
       </div>
-
-      {pendingSignalements > 0 && (
-        <Link
-          href="/workshop/issues"
-          className="mb-6 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm transition-colors hover:bg-amber-100"
-        >
-          <span className="font-medium text-amber-900">
-            {pendingSignalements} signalement{pendingSignalements > 1 ? "s" : ""} à valider
-          </span>
-          <span className="text-amber-700">Valider →</span>
-        </Link>
-      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -210,10 +186,7 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
               <EmptyState title="Aucun véhicule en cours" />
             ) : (
               <div className="space-y-2">
-                {inWorkshop
-                  .filter((v) => v.status !== WORKSHOP_WAITING_STATUS)
-                  .slice(0, 6)
-                  .map((v) => (
+                {assigned.slice(0, 6).map((v) => (
                     <Link
                       key={v.id}
                       href={`/workshop/vehicle/${v.id}`}
@@ -258,7 +231,7 @@ function StatCard({
     <Link
       href={href}
       className={`stat-card block transition-colors hover:border-slate-300 ${
-        highlight ? "border-amber-300 bg-amber-50" : "bg-white"
+        highlight ? "stat-card-highlight" : ""
       }`}
     >
       <p className="text-2xl font-bold tracking-tight text-slate-900">{value}</p>

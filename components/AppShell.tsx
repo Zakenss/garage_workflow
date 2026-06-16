@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/constants";
+import { dedupeNav, type NavItem } from "@/lib/nav-utils";
 
-type NavItem = { href: string; label: string };
+export type { NavItem };
 
 export function AppShell({
   user,
@@ -17,6 +18,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const navItems = dedupeNav(nav);
 
   function logout() {
     // Server redirect clears the session cookie and lands on /login in one step.
@@ -47,7 +49,7 @@ export function AppShell({
           className="scrollbar-thin mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3 sm:px-6 lg:px-8"
           aria-label="Navigation principale"
         >
-          {nav.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link

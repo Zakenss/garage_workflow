@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
+import { MANAGER_NAV } from "@/lib/manager";
 import { supabase } from "@/lib/supabase";
 import { notifyRole, updateVehicleStatus } from "@/lib/db";
 import type { Vehicle } from "@/lib/types";
@@ -98,7 +99,7 @@ export default function FinalValidationPage() {
     <AppShell
       user={user}
       nav={[
-        { href: "/workshop/final", label: "Validation finale" },
+        ...MANAGER_NAV,
         { href: `/workshop/final/${id}`, label: vehicle.license_plate },
       ]}
     >

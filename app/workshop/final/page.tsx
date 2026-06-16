@@ -8,6 +8,8 @@ import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
+import { MANAGER_NAV } from "@/lib/manager";
+import { fetchRepairCompleteVehicles } from "@/lib/workshop-vehicles";
 import { supabase } from "@/lib/supabase";
 import type { Vehicle } from "@/lib/types";
 
@@ -17,29 +19,29 @@ export default function FinalListPage() {
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const { data } = await supabase
-      .from("vehicles")
-      .select("*")
-      .in("status", ["repair_complete", "bodywork_complete"])
-      .order("updated_at", { ascending: false });
-    setVehicles((data as Vehicle[]) ?? []);
+    setVehicles(await fetchRepairCompleteVehicles());
     setLoading(false);
   }
 
   useEffect(() => {
     load();
+    const ch = supabase
+      .channel("workshop-final")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vehicles" },
+        () => load()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, []);
 
   if (!user) return <LoadingPage />;
 
   return (
-    <AppShell
-      user={user}
-      nav={[
-        { href: "/dashboard", label: "Tableau de bord" },
-        { href: "/workshop/final", label: "Validation finale" },
-      ]}
-    >
+    <AppShell user={user} nav={[...MANAGER_NAV]}>
       <PageHeader
         title="Validation finale"
         subtitle="Contrôle final avant mise en vente"

@@ -16,6 +16,7 @@ import { assignVehicleToMechanic, sendVehicleToWorkshop } from "@/lib/manager-ac
 import {
   deleteReceptionPhoto,
   fetchReceptionPhotos,
+  fetchReceptionState,
   isReceptionComplete,
   isVeiCaseComplete,
   needsVeiBeforeWorkshop,
@@ -125,33 +126,41 @@ export default function ReceptionDetailPage() {
 
   async function savePhotos(paths: string[], photoType: "exterior" | "additional" = "exterior") {
     if (!user) return;
-    await supabase.from("vehicle_photos").insert(
-      paths.map((p) => ({
-        vehicle_id: id,
-        storage_path: p,
-        photo_type: photoType,
-        uploaded_by: user.id,
-      }))
-    );
-    setReceptionFeedback("Photos enregistrées.");
     setError("");
-    const snapshot = await load();
-    await tryAutoAdvanceNonVei(snapshot);
+    try {
+      const { error } = await supabase.from("vehicle_photos").insert(
+        paths.map((p) => ({
+          vehicle_id: id,
+          storage_path: p,
+          photo_type: photoType,
+          uploaded_by: user.id,
+        }))
+      );
+      if (error) throw error;
+      setReceptionFeedback("Photos enregistrées.");
+      const snapshot = await load();
+      await tryAutoAdvanceNonVei(snapshot);
+    } catch (err) {
+      setReceptionFeedback("");
+      setError(err instanceof Error ? err.message : "Impossible d'enregistrer les photos.");
+    }
   }
 
   async function tryAutoAdvanceNonVei(
-    snapshot?: { vehicle: Vehicle | null; photoCount: number; vin: string }
+    snapshot?: { vehicle: Vehicle | null; photoCount: number; vin: string; complete?: boolean }
   ) {
     const v = snapshot?.vehicle ?? vehicle;
-    const pc = snapshot?.photoCount ?? photoCount;
-    const currentVin = snapshot?.vin ?? vin;
     if (!user || !v || v.vei_procedure) return;
-    const complete = isReceptionComplete({ vin: currentVin }, pc);
-    if (!complete || v.status !== "arrived") return;
+
+    const reception =
+      snapshot?.complete !== undefined
+        ? { complete: snapshot.complete }
+        : await fetchReceptionState(id);
+    if (!reception.complete || v.status !== "arrived") return;
 
     try {
       await sendVehicleToWorkshop(id, user, {
-        vin: currentVin.trim(),
+        vin: (snapshot?.vin ?? vin).trim(),
         workshop_notes: receptionNotes || null,
       });
       router.push(`/workshop/in-workshop?new=${id}&tab=assign`);
@@ -182,6 +191,7 @@ export default function ReceptionDetailPage() {
     setError("");
     try {
       const plate = vehicleForm.license_plate.trim().toUpperCase();
+      const trimmedVin = vin.trim();
       const { error: updateError } = await supabase
         .from("vehicles")
         .update({
@@ -192,12 +202,20 @@ export default function ReceptionDetailPage() {
           provenance: vehicleForm.provenance.trim() || null,
           arrival_date: vehicleForm.arrival_date,
           notes: vehicleForm.notes.trim() || null,
-          vin: vin.trim() || null,
+          vin: trimmedVin || null,
           workshop_notes: receptionNotes || null,
           vei_procedure: vehicleForm.vei_procedure,
         })
         .eq("id", id);
       if (updateError) throw updateError;
+
+      const reception = await fetchReceptionState(id);
+      if (reception.complete) {
+        await supabase
+          .from("vehicles")
+          .update({ serial_confirmed: true })
+          .eq("id", id);
+      }
 
       if (vehicleForm.vei_procedure && !vehicle.vei_procedure) {
         const { data: existing } = await supabase
@@ -217,11 +235,20 @@ export default function ReceptionDetailPage() {
       }
 
       await addTimeline(id, user.id, "vehicle_updated", { license_plate: plate });
-      setReceptionFeedback("Fiche véhicule et réception enregistrées.");
       const snapshot = await load();
+      if (reception.complete) {
+        setReceptionFeedback(
+          vehicleForm.vei_procedure
+            ? "Réception complète enregistrée. Finalisez l'expertise VEI pour assigner."
+            : "Réception complète enregistrée."
+        );
+      } else {
+        setReceptionFeedback("Fiche véhicule et réception enregistrées.");
+      }
       await tryAutoAdvanceNonVei({
         ...snapshot,
-        vin: vin.trim() || snapshot.vin,
+        vin: trimmedVin || snapshot.vin,
+        complete: reception.complete,
       });
     } catch (err) {
       setReceptionFeedback("");
@@ -276,7 +303,9 @@ export default function ReceptionDetailPage() {
   const awaitingAssign =
     vehicle.status === "in_workshop" && !vehicle.assigned_mechanic_id;
   const veiRequired = needsVeiBeforeWorkshop({ vei_procedure: vehicleForm.vei_procedure });
-  const receptionComplete = isReceptionComplete({ vin }, photoCount);
+  const receptionComplete =
+    vehicle.serial_confirmed ||
+    isReceptionComplete({ vin: vehicle.vin ?? vin, serial_confirmed: vehicle.serial_confirmed }, photoCount);
   const canSendToWorkshop =
     (isArrived || awaitingAssign) &&
     receptionComplete &&
@@ -535,17 +564,6 @@ export default function ReceptionDetailPage() {
           </button>
         </div>
       )}
-
-      <div className="flex flex-wrap gap-3">
-        {veiRequired && (
-          <Link href={`/workshop/vei/${id}`} className="btn-secondary">
-            Expertises VEI
-          </Link>
-        )}
-        <Link href={`/vehicles/${id}`} className="btn-ghost">
-          Fiche véhicule complète
-        </Link>
-      </div>
     </AppShell>
   );
 }

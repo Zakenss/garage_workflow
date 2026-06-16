@@ -37,6 +37,7 @@ export function canAccess(role: UserRole, path: string): boolean {
       "/workshop/in-workshop",
       "/workshop/queue",
       "/workshop/termine",
+      "/workshop/final",
       "/workshop/issues",
       "/workshop/vehicle",
       "/workshop/vei",

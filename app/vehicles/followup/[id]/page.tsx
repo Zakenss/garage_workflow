@@ -4,7 +4,7 @@ import { useSession } from "@/lib/session-context";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Alert } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { FollowupRepairPanel } from "@/components/FollowupRepairPanel";
@@ -22,18 +22,28 @@ import {
   type IssuePartInfo,
   type IssueWithPart,
 } from "@/lib/followup-repair";
-import { createFollowupIssue } from "@/lib/mechanic-issues";
+import {
+  assessVehicleRepairCompletion,
+  completeVehicleReconditioning,
+} from "@/lib/vehicle-repair-complete";
+import {
+  createFollowupIssue,
+} from "@/lib/mechanic-issues";
 import { supabase } from "@/lib/supabase";
 import type { Vehicle } from "@/lib/types";
 
 export default function FollowupVehiclePage() {
   const { id: vehicleId } = useParams<{ id: string }>();
+  const router = useRouter();
   const user = useSession();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [issues, setIssues] = useState<IssueWithPart[]>([]);
   const [parts, setParts] = useState<IssuePartInfo[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [repairBusyId, setRepairBusyId] = useState<string | null>(null);
+  const [finishBusy, setFinishBusy] = useState(false);
+  const [canFinishVehicle, setCanFinishVehicle] = useState(false);
+  const [finishBlockers, setFinishBlockers] = useState<string[]>([]);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -63,6 +73,11 @@ export default function FollowupVehiclePage() {
       );
     }
     setLoading(false);
+    if (v) {
+      const assessment = await assessVehicleRepairCompletion(vehicleId);
+      setCanFinishVehicle(assessment.canComplete);
+      setFinishBlockers(assessment.blockers);
+    }
   }
 
   useEffect(() => {
@@ -133,10 +148,36 @@ export default function FollowupVehiclePage() {
       await completeIssueRepair(issue.id, user);
       setSuccess("Réparation terminée — l'administration est notifiée.");
       await load();
+      const autoDone = await assessVehicleRepairCompletion(vehicleId);
+      if (autoDone.canComplete) {
+        setSuccess(
+          "Toutes les réparations sont terminées. Confirmez « Reconditionnement terminé » ci-dessous pour envoyer au chef d'atelier."
+        );
+      }
     } catch {
       setError("Impossible de clôturer la réparation.");
     } finally {
       setRepairBusyId(null);
+    }
+  }
+
+  async function handleFinishReconditioning() {
+    if (!user) return;
+    setFinishBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await completeVehicleReconditioning(vehicleId, user);
+      setSuccess("Reconditionnement terminé — le chef d'atelier va valider pour la vente.");
+      router.push("/vehicles/my");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de terminer le reconditionnement."
+      );
+    } finally {
+      setFinishBusy(false);
     }
   }
 
@@ -198,6 +239,34 @@ export default function FollowupVehiclePage() {
           showTaskTiming={user.role === "admin"}
         />
       </section>
+
+      {(canFinishVehicle ||
+        finishBlockers.length > 0 ||
+        vehicle.status === "repair_in_progress" ||
+        vehicle.status === "validation_pending") && (
+        <section className="mb-8">
+          <h2 className="section-title mb-2">Fin du reconditionnement</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Une fois toutes les réparations et pièces terminées, confirmez l&apos;envoi au
+            chef d&apos;atelier pour validation finale et mise en vente.
+          </p>
+          {finishBlockers.length > 0 && (
+            <ul className="mb-4 list-inside list-disc text-sm text-amber-800">
+              {finishBlockers.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={handleFinishReconditioning}
+            disabled={!canFinishVehicle || finishBusy}
+            className="btn-success w-full !min-h-12 disabled:opacity-50"
+          >
+            {finishBusy ? "Envoi…" : "Reconditionnement terminé"}
+          </button>
+        </section>
+      )}
 
       <section className="mb-8">
         <h2 className="section-title mb-4">Historique des signalements</h2>

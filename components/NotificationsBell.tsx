@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Notification, SessionUser } from "@/lib/types";
 
 export function NotificationsBell({ user }: { user: SessionUser }) {
+  const router = useRouter();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -45,6 +47,22 @@ export function NotificationsBell({ user }: { user: SessionUser }) {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [open]);
+
+  async function openNotification(n: Notification) {
+    await markRead(n.id);
+    setOpen(false);
+    if (n.vehicle_id && user.role === "seller") {
+      router.push(`/vehicles/ready-sale?vehicle=${n.vehicle_id}`);
+      return;
+    }
+    if (n.vehicle_id && user.role === "workshop_manager") {
+      if (n.type === "repair_complete") {
+        router.push(`/workshop/final/${n.vehicle_id}`);
+        return;
+      }
+      router.push(`/vehicles/tracking?vehicle=${n.vehicle_id}`);
+    }
+  }
 
   async function markRead(id: string) {
     await supabase.from("notifications").update({ read: true }).eq("id", id);
@@ -96,7 +114,7 @@ export function NotificationsBell({ user }: { user: SessionUser }) {
               <button
                 key={n.id}
                 type="button"
-                onClick={() => markRead(n.id)}
+                onClick={() => openNotification(n)}
                 className={`block w-full border-b border-slate-100 px-4 py-3 text-left text-sm transition-colors duration-150 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none ${
                   n.read ? "text-slate-500" : "font-medium text-slate-900"
                 }`}
