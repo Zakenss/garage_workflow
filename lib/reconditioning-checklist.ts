@@ -1,7 +1,10 @@
+import type { IssueCategory } from "./constants";
+
 export type ChecklistItemIssue = {
   problem: string;
   photoPaths: string[];
   partsNeeded: string;
+  problemCategory?: IssueCategory;
   updatedAt?: string;
 };
 
@@ -661,6 +664,29 @@ export function deleteChecklistItem(
             ),
           }
     ),
+  };
+}
+
+export function deleteChecklistGroup(
+  state: ChecklistState,
+  sectionId: string,
+  groupId: string
+): ChecklistState {
+  return {
+    sections: state.sections.map((sec) =>
+      sec.id !== sectionId
+        ? sec
+        : { ...sec, groups: sec.groups.filter((grp) => grp.id !== groupId) }
+    ),
+  };
+}
+
+export function deleteChecklistSection(
+  state: ChecklistState,
+  sectionId: string
+): ChecklistState {
+  return {
+    sections: state.sections.filter((sec) => sec.id !== sectionId),
   };
 }
 

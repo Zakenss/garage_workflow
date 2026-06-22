@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { supabase } from "@/lib/supabase";
 import { updateVehicleStatus } from "@/lib/db";
+import { maybeActivateMechanicFollowup } from "@/lib/parts-orders";
 import { BODYWORKER_NAV } from "@/lib/role-nav";
 
 type BodyworkRow = {
@@ -17,7 +18,9 @@ type BodyworkRow = {
   status: string;
   notes: string | null;
   vehicle_id: string;
+  source_part_id: string | null;
   vehicles: { license_plate: string; make: string; model: string };
+  parts: { part_name: string } | null;
 };
 
 export default function BodyworkPage() {
@@ -31,7 +34,7 @@ export default function BodyworkPage() {
     if (!user) return;
     const { data } = await supabase
       .from("bodywork")
-      .select("*, vehicles(license_plate, make, model)")
+      .select("*, vehicles(license_plate, make, model), parts!source_part_id(part_name)")
       .eq("bodyworker_id", user.id)
       .neq("status", "completed")
       .order("created_at", { ascending: false });
@@ -64,7 +67,9 @@ export default function BodyworkPage() {
         notes,
       })
       .eq("id", selected.id);
-    await updateVehicleStatus(selected.vehicle_id, "bodywork_in_progress", user);
+    if (!selected.source_part_id) {
+      await updateVehicleStatus(selected.vehicle_id, "bodywork_in_progress", user);
+    }
     load();
   }
 
@@ -78,7 +83,33 @@ export default function BodyworkPage() {
         notes,
       })
       .eq("id", selected.id);
-    await updateVehicleStatus(selected.vehicle_id, "bodywork_complete", user);
+
+    if (selected.source_part_id) {
+      const { data: vehicle } = await supabase
+        .from("vehicles")
+        .select("parts_list_status")
+        .eq("id", selected.vehicle_id)
+        .single();
+      const { data: part } = await supabase
+        .from("parts")
+        .select("quantity")
+        .eq("id", selected.source_part_id)
+        .single();
+      const partStatus =
+        vehicle?.parts_list_status != null ? "ready_for_mechanic" : "received";
+      await supabase
+        .from("parts")
+        .update({
+          status: partStatus,
+          repair_action: null,
+          quantity_received: part ? Number(part.quantity) : 1,
+        })
+        .eq("id", selected.source_part_id);
+      await maybeActivateMechanicFollowup(selected.vehicle_id);
+    } else {
+      await updateVehicleStatus(selected.vehicle_id, "bodywork_complete", user);
+    }
+
     setSelected(null);
     load();
   }
@@ -120,6 +151,11 @@ export default function BodyworkPage() {
                 <p className="mt-0.5 text-sm text-slate-600">
                   {b.vehicles.make} {b.vehicles.model}
                 </p>
+                {b.source_part_id && (
+                  <p className="mt-1 text-sm font-medium text-violet-800">
+                    Réparation pièce : {b.parts?.part_name ?? "—"}
+                  </p>
+                )}
               </button>
             ))}
           </div>
@@ -131,6 +167,11 @@ export default function BodyworkPage() {
             <p className="text-sm text-slate-600">
               {selected.vehicles.make} {selected.vehicles.model}
             </p>
+            {selected.source_part_id && (
+              <p className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900">
+                Réparation pièce : <strong>{selected.parts?.part_name ?? "—"}</strong>
+              </p>
+            )}
           </div>
           <label className="label-field">
             Notes carrosserie

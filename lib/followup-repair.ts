@@ -8,6 +8,7 @@ export type IssuePartInfo = {
   id: string;
   part_name: string;
   status: string;
+  repair_action?: string | null;
   quantity: number;
   supplier: string | null;
   unit_price: number | null;
@@ -64,7 +65,7 @@ export function computeIssueRepairState(
   const needsParts = isPartsNeededText(issue.parts_needed);
   if (needsParts) {
     if (!part) return "waiting_parts";
-    if (part.status !== "received") return "waiting_parts";
+    if (part.status !== "received" && part.status !== "in_stock" && part.status !== "ready_for_mechanic") return "waiting_parts";
   }
 
   return "ready";
@@ -84,7 +85,7 @@ export async function fetchPartsForVehicle(
 ): Promise<(IssuePartInfo & { notes?: string | null })[]> {
   const { data, error } = await supabase
     .from("parts")
-    .select("id, part_name, status, quantity, supplier, unit_price, notes")
+    .select("id, part_name, status, repair_action, quantity, supplier, unit_price, notes")
     .eq("vehicle_id", vehicleId);
 
   if (error) {
@@ -96,6 +97,7 @@ export async function fetchPartsForVehicle(
     id: row.id,
     part_name: row.part_name,
     status: row.status,
+    repair_action: row.repair_action ?? null,
     quantity: Number(row.quantity),
     supplier: row.supplier ?? null,
     unit_price: row.unit_price != null ? Number(row.unit_price) : null,

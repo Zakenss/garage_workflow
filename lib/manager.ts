@@ -4,8 +4,12 @@ import type { VehicleStatus } from "./types";
 export const MANAGER_NAV = [
   { href: "/dashboard", label: "Tableau de bord" },
   { href: "/vehicles/tracking", label: "Suivi" },
+  { href: "/workshop/parts-approval", label: "Validation pièces" },
+  { href: "/workshop/schedule", label: "Planification" },
   { href: "/workshop/queue", label: "Priorités" },
   { href: "/parts", label: "Photos et problèmes" },
+  { href: "/parts/costs", label: "Coûts pièces" },
+  { href: "/vehicles/repair-reports", label: "Rapports réparation" },
 ] as const;
 
 /** Waiting for mechanic assignment */

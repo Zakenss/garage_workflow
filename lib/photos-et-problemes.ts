@@ -5,6 +5,7 @@ import {
   type ChecklistPartNotes,
 } from "./sync-checklist-parts";
 import type { MechanicReportedIssue } from "./mechanic-issues";
+import type { IssueCategory } from "./constants";
 import { fetchAllVehiclePartCosts, type VehiclePartsCost } from "./parts-costs";
 import { getPublicUrl, supabase } from "./supabase";
 import type { VehicleStatus } from "./types";
@@ -16,6 +17,8 @@ export type PhotosEtProblemesVehicle = {
     make: string;
     model: string;
     status: VehicleStatus;
+    parts_list_status?: import("./types").PartsListStatus | null;
+    parts_list_rejection_comment?: string | null;
   };
   submittedAt: string;
   mechanicName: string | null;
@@ -70,6 +73,7 @@ function signalementFromPart(
     checklist_label: label,
     problem: problem || "Problème signalé (voir photo)",
     parts_needed: partsNeeded,
+    problem_category: meta?.problemCategory ?? null,
     photo_paths: photoPaths,
     status: "approved",
     validated_by: null,
@@ -87,6 +91,7 @@ function signalementFromChecklistItem(
     itemLabel: string;
     problem: string;
     partsNeeded: string;
+    problemCategory?: IssueCategory;
     photoPaths: string[];
   },
   vehicleId: string,
@@ -101,6 +106,7 @@ function signalementFromChecklistItem(
     checklist_label: item.itemLabel,
     problem: item.problem,
     parts_needed: item.partsNeeded,
+    problem_category: item.problemCategory ?? null,
     photo_paths: item.photoPaths,
     status: "approved",
     validated_by: null,
@@ -137,15 +143,39 @@ function mergeSignalements(
       ...existing,
       problem: existing.problem || s.problem,
       parts_needed: existing.parts_needed || s.parts_needed,
+      problem_category: existing.problem_category ?? s.problem_category,
       photo_paths:
         existing.photo_paths.length > 0 ? existing.photo_paths : s.photo_paths,
       part_id: existing.part_id ?? s.part_id,
     });
   }
 
-  return Array.from(byItemId.values()).sort((a, b) =>
-    (a.checklist_label ?? "").localeCompare(b.checklist_label ?? "")
-  );
+  return Array.from(byItemId.values()).sort(compareSignalementsByCategory);
+}
+
+const CATEGORY_ORDER: Record<string, number> = {
+  mechanical: 0,
+  bodywork: 1,
+};
+
+export function compareSignalementsByCategory(
+  a: MechanicReportedIssue,
+  b: MechanicReportedIssue
+): number {
+  const ao = a.problem_category != null ? CATEGORY_ORDER[a.problem_category] ?? 2 : 2;
+  const bo = b.problem_category != null ? CATEGORY_ORDER[b.problem_category] ?? 2 : 2;
+  if (ao !== bo) return ao - bo;
+  return (a.checklist_label ?? "").localeCompare(b.checklist_label ?? "");
+}
+
+export function filterSignalementsByCategory(
+  issues: MechanicReportedIssue[],
+  category: IssueCategory | "all"
+): MechanicReportedIssue[] {
+  if (category === "all") return [...issues].sort(compareSignalementsByCategory);
+  return issues
+    .filter((i) => i.problem_category === category)
+    .sort(compareSignalementsByCategory);
 }
 
 export function partPhotoUrl(photoPath: string | null | undefined): string | null {
@@ -157,7 +187,7 @@ export async function fetchPhotosEtProblemesVehicles(): Promise<PhotosEtProbleme
   const { data: diagnostics, error } = await supabase
     .from("diagnostics")
     .select(
-      "signed_at, checklist_data, mechanic_id, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status)"
+      "signed_at, checklist_data, mechanic_id, mechanic:users!mechanic_id(full_name), vehicle:vehicles(id, license_plate, make, model, status, parts_list_status, parts_list_rejection_comment)"
     )
     .not("signed_at", "is", null)
     .order("signed_at", { ascending: false });

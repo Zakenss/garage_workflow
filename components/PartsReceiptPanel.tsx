@@ -2,6 +2,7 @@
 
 import { PART_STATUS_LABELS } from "@/lib/constants";
 import type { IssuePartInfo } from "@/lib/followup-repair";
+import { partStatusDetailLabel } from "@/lib/part-repair-routing";
 
 export function PartsReceiptPanel({
   parts,
@@ -27,27 +28,38 @@ export function PartsReceiptPanel({
       </div>
 
       <ul className="space-y-2">
-        {parts.map((p) => (
+        {parts.map((p) => {
+          const ready = p.status === "received" || p.status === "in_stock" || p.status === "ready_for_mechanic";
+          const detail = partStatusDetailLabel(p.status, p.repair_action);
+          const label = detail
+            ? `${PART_STATUS_LABELS[p.status] ?? p.status} — ${detail}`
+            : (PART_STATUS_LABELS[p.status] ?? p.status);
+          return (
           <li
             key={p.id}
             className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm ${
-              p.status === "received" || p.status === "in_stock"
+              ready
                 ? "border-emerald-200 bg-emerald-50/60"
+                : p.status === "to_repair"
+                  ? "border-violet-200 bg-violet-50/60"
                 : "border-amber-200 bg-amber-50/60"
             }`}
           >
             <span className="font-medium text-slate-900">{p.part_name}</span>
             <span
               className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                p.status === "received" || p.status === "in_stock"
+                ready
                   ? "bg-emerald-100 text-emerald-900"
+                  : p.status === "to_repair"
+                    ? "bg-violet-100 text-violet-900"
                   : "bg-amber-100 text-amber-900"
               }`}
             >
-              {PART_STATUS_LABELS[p.status] ?? p.status}
+              {label}
             </span>
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       {allReceived ? (

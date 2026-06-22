@@ -5,9 +5,11 @@ export type PartCostLine = {
   id: string;
   part_name: string;
   quantity: number;
+  quantity_received?: number;
   unit_price: number | null;
   supplier: string | null;
   status: string;
+  repair_action: string | null;
   lineTotal: number;
 };
 
@@ -62,7 +64,7 @@ export async function fetchAllVehiclePartCosts(): Promise<VehiclePartsCost[]> {
   const { data, error } = await supabase
     .from("parts")
     .select(
-      "id, part_name, quantity, unit_price, supplier, status, vehicle_id, vehicles(id, license_plate, make, model, status)"
+      "id, part_name, quantity, quantity_received, unit_price, supplier, status, repair_action, vehicle_id, vehicles(id, license_plate, make, model, status)"
     )
     .order("created_at", { ascending: false });
 
@@ -83,9 +85,11 @@ export async function fetchAllVehiclePartCosts(): Promise<VehiclePartsCost[]> {
       id: row.id,
       part_name: row.part_name,
       quantity: Number(row.quantity),
+      quantity_received: Number(row.quantity_received ?? 0),
       unit_price: unitPrice,
       supplier: row.supplier ?? null,
       status: row.status,
+      repair_action: row.repair_action ?? null,
       lineTotal: lineTotal(Number(row.quantity), unitPrice),
     };
 

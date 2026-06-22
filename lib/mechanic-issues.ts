@@ -1,4 +1,6 @@
 import { notifyRole } from "./db";
+import { initVehiclePartsListDraft } from "./parts-approval";
+import { ISSUE_CATEGORY_LABELS, type IssueCategory } from "./constants";
 import type { ChecklistState } from "./reconditioning-checklist";
 import { isPartsNeededText } from "./sync-checklist-parts";
 import { getPublicUrl, supabase } from "./supabase";
@@ -23,6 +25,7 @@ export type MechanicReportedIssue = {
   checklist_label: string | null;
   problem: string;
   parts_needed: string;
+  problem_category: IssueCategory | null;
   photo_paths: string[];
   status: IssueStatus;
   validated_by: string | null;
@@ -61,6 +64,7 @@ export function issuePhotoUrls(issue: MechanicReportedIssue): string[] {
 function rowToIssue(row: Record<string, unknown>): MechanicReportedIssue {
   return {
     ...(row as MechanicReportedIssue),
+    problem_category: (row.problem_category as IssueCategory | null) ?? null,
     photo_paths: Array.isArray(row.photo_paths) ? (row.photo_paths as string[]) : [],
   };
 }
@@ -239,6 +243,7 @@ export async function syncChecklistToReportedIssues(
       checklist_label: req.itemLabel,
       problem: req.problem,
       parts_needed: req.partsNeeded,
+      problem_category: req.problemCategory ?? null,
       photo_paths: req.photoPaths,
     };
 
@@ -310,6 +315,7 @@ export async function createFollowupIssue(
     problem: string;
     partsNeeded: string;
     photoPaths: string[];
+    problemCategory: IssueCategory;
     checklistLabel?: string;
   }
 ) {
@@ -322,6 +328,7 @@ export async function createFollowupIssue(
       checklist_label: input.checklistLabel ?? "Signalement complémentaire",
       problem: input.problem,
       parts_needed: input.partsNeeded,
+      problem_category: input.problemCategory,
       photo_paths: input.photoPaths,
       status: "pending_manager",
     })
@@ -374,11 +381,16 @@ export async function approveIssue(
         quantity: 1,
         status: "to_order",
         photo_path,
-        notes: JSON.stringify({ reportedIssueId: issueId, problem: issue.problem }),
+        notes: JSON.stringify({
+          reportedIssueId: issueId,
+          problem: issue.problem,
+          problemCategory: issue.problem_category,
+        }),
       })
       .select("id")
       .single();
     partId = part?.id ?? null;
+    if (partId) await initVehiclePartsListDraft(vehicleId);
   }
 
   await supabase
@@ -397,10 +409,16 @@ export async function approveIssue(
     .eq("id", vehicleId)
     .single();
 
+  const category: IssueCategory | null =
+    issue.problem_category === "mechanical" || issue.problem_category === "bodywork"
+      ? issue.problem_category
+      : null;
+  const categoryLabel = category ? ` (${ISSUE_CATEGORY_LABELS[category]})` : "";
+
   await notifyRole(
     "storekeeper",
     "issue_approved",
-    `Pièce à commander — ${v?.license_plate ?? "véhicule"}: ${issue.parts_needed}`,
+    `Pièce à commander${categoryLabel} — ${v?.license_plate ?? "véhicule"}: ${issue.parts_needed}`,
     vehicleId
   );
 }

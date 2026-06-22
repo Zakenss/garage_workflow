@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { IssueCategoryBadge, IssueCategoryPicker } from "@/components/IssueCategoryPicker";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import type { IssueCategory } from "@/lib/constants";
 import { getPublicUrl } from "@/lib/supabase";
 import {
   ISSUE_STATUS_LABELS,
@@ -39,9 +41,12 @@ export function ReportedIssuesPanel({
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="font-semibold text-slate-900">
-                  {issue.checklist_label ?? "Signalement"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-900">
+                    {issue.checklist_label ?? "Signalement"}
+                  </p>
+                  <IssueCategoryBadge category={issue.problem_category} />
+                </div>
                 {issue.source === "followup" && (
                   <p className="text-xs text-amber-700">Signalement complémentaire</p>
                 )}
@@ -130,11 +135,13 @@ export function AddFollowupIssueForm({
     problem: string;
     partsNeeded: string;
     photoPaths: string[];
+    problemCategory: IssueCategory;
   }) => Promise<void>;
   submitting?: boolean;
 }) {
   const [problem, setProblem] = useState("");
   const [partsNeeded, setPartsNeeded] = useState("");
+  const [problemCategory, setProblemCategory] = useState<IssueCategory | null>(null);
   const [photoPaths, setPhotoPaths] = useState<string[]>([]);
   const [error, setError] = useState("");
 
@@ -153,13 +160,19 @@ export function AddFollowupIssueForm({
       setError("Indiquez les pièces nécessaires.");
       return;
     }
+    if (!problemCategory) {
+      setError("Précisez s'il s'agit d'un problème mécanique ou carrosserie.");
+      return;
+    }
     await onSubmit({
       problem: problem.trim(),
       partsNeeded: partsNeeded.trim(),
       photoPaths,
+      problemCategory,
     });
     setProblem("");
     setPartsNeeded("");
+    setProblemCategory(null);
     setPhotoPaths([]);
   }
 
@@ -169,6 +182,8 @@ export function AddFollowupIssueForm({
       <p className="text-sm text-slate-500">
         Envoyé au chef d&apos;atelier pour validation avant commande magasin.
       </p>
+
+      <IssueCategoryPicker value={problemCategory} onChange={setProblemCategory} />
 
       <label className="label-field">
         Quel est le problème ?

@@ -24,6 +24,8 @@ export type VehicleStatus =
   | "reserved"
   | "sold";
 
+export type PartsListStatus = "draft" | "pending_approval" | "approved" | "rejected";
+
 export interface SessionUser {
   id: string;
   username: string;
@@ -68,6 +70,15 @@ export interface Vehicle {
   assigned_mechanic_id: string | null;
   assigned_bodyworker_id: string | null;
   dispatch_priority: number | null;
+  parts_list_status?: PartsListStatus | null;
+  parts_list_submitted_at?: string | null;
+  parts_list_rejection_comment?: string | null;
+  scheduled_repair_at?: string | null;
+  scheduled_by?: string | null;
+  parts_ready_notified_at?: string | null;
+  repair_started_at?: string | null;
+  repair_completed_at?: string | null;
+  seller_expert_calendar_event_id?: string | null;
   created_at: string;
   updated_at: string;
 }

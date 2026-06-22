@@ -7,14 +7,22 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { PartPricingEditor } from "@/components/PartPricingEditor";
-import { PartStatusPicker } from "@/components/PartStatusPicker";
+import {
+  MarkAllPartsReadyButton,
+  PartReceiptControls,
+} from "@/components/PartReceiptControls";
+import { PartsListApprovalPanel } from "@/components/PartsListApprovalPanel";
+import { PartsCostDocumentButton } from "@/components/PartsCostDocumentButton";
+import { StorekeeperPartStatusControls } from "@/components/StorekeeperPartStatusControls";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PART_STATUS_LABELS } from "@/lib/constants";
 import {
   fetchStorekeeperPartOrders,
-  updatePartOrderStatus,
+  summarizeVehicleParts,
+  PARTS_SUMMARY_LABELS,
   type VehiclePartOrders,
 } from "@/lib/parts-orders";
+import { fetchVehiclePartsApproval, type VehiclePartsApproval } from "@/lib/parts-approval";
 import { STOREKEEPER_NAV } from "@/lib/storekeeper";
 import { useSession } from "@/lib/session-context";
 import { supabase } from "@/lib/supabase";
@@ -23,7 +31,6 @@ export default function StorekeeperOrdersPage() {
   const user = useSession();
   const [groups, setGroups] = useState<VehiclePartOrders[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyPartId, setBusyPartId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [search, setSearch] = useState("");
 
@@ -46,22 +53,6 @@ export default function StorekeeperOrdersPage() {
     };
   }, [user?.id]);
 
-  async function setStatus(partId: string, status: string, plate: string) {
-    setBusyPartId(partId);
-    setFeedback("");
-    try {
-      const { allReceived } = await updatePartOrderStatus(partId, status);
-      if (status === "received" && allReceived) {
-        setFeedback(
-          `Toutes les pièces reçues pour ${plate} — le mécanicien est notifié pour la phase réparation / signalements.`
-        );
-      }
-      await load();
-    } finally {
-      setBusyPartId(null);
-    }
-  }
-
   if (!user) return <LoadingPage />;
 
   const query = search.trim().toLowerCase();
@@ -78,7 +69,7 @@ export default function StorekeeperOrdersPage() {
     <AppShell user={user} nav={[...STOREKEEPER_NAV]}>
       <PageHeader
         title="Commandes pièces"
-        subtitle="Mettez à jour le statut de chaque pièce — « Reçue » notifie le mécanicien et ouvre sa check-list finale"
+        subtitle="Réception des pièces, validation chef d'atelier et préparation pour le mécanicien"
       />
 
       <p className="mb-4 text-sm text-slate-600">
@@ -125,82 +116,135 @@ export default function StorekeeperOrdersPage() {
       ) : (
         <div className="space-y-4">
           {filtered.map((group) => (
-            <details
+            <VehicleOrderCard
               key={group.vehicle.id}
-              className="card-padded group"
-              open={group.pendingCount > 0}
-            >
-              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {group.vehicle.license_plate}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {group.vehicle.make} {group.vehicle.model}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={group.vehicle.status} />
-                    {group.pendingCount > 0 ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                        {group.pendingCount} en cours
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                        Toutes reçues
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </summary>
-
-              <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
-                {group.parts.map((part) => (
-                  <div key={part.id} className="space-y-3 rounded-lg border border-slate-200 p-4">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-medium text-slate-900">{part.part_name}</p>
-                        <p className="text-sm text-slate-500">
-                          Qté {part.quantity}
-                          {part.supplier && ` · ${part.supplier}`}
-                          {" · "}
-                          {PART_STATUS_LABELS[part.status] ?? part.status}
-                        </p>
-                      </div>
-                    </div>
-
-                    <PartPricingEditor
-                      part={{
-                        id: part.id,
-                        part_name: part.part_name,
-                        quantity: part.quantity,
-                        unit_price: part.unit_price,
-                        supplier: part.supplier,
-                        status: part.status,
-                        lineTotal:
-                          part.unit_price != null
-                            ? part.quantity * part.unit_price
-                            : 0,
-                      }}
-                      onSaved={load}
-                    />
-
-                    <div>
-                      <p className="mb-2 text-xs font-medium text-slate-600">Statut commande</p>
-                      <PartStatusPicker
-                        status={part.status}
-                        disabled={busyPartId === part.id}
-                        onChange={(s) => setStatus(part.id, s, group.vehicle.license_plate)}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
+              group={group}
+              onFeedback={setFeedback}
+              onReload={load}
+            />
           ))}
         </div>
       )}
     </AppShell>
+  );
+}
+
+function VehicleOrderCard({
+  group,
+  onFeedback,
+  onReload,
+}: {
+  group: VehiclePartOrders;
+  onFeedback: (msg: string) => void;
+  onReload: () => void | Promise<void>;
+}) {
+  const [approval, setApproval] = useState<VehiclePartsApproval | null>(null);
+  const phase = summarizeVehicleParts(group.parts, group.vehicle.parts_list_status);
+
+  useEffect(() => {
+    fetchVehiclePartsApproval(group.vehicle.id).then(setApproval);
+  }, [group.vehicle.id, group.parts]);
+
+  async function refresh() {
+    setApproval(await fetchVehiclePartsApproval(group.vehicle.id));
+    await onReload();
+  }
+
+  return (
+    <details className="card-padded group" open={group.pendingCount > 0}>
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-slate-900">{group.vehicle.license_plate}</p>
+            <p className="text-sm text-slate-600">
+              {group.vehicle.make} {group.vehicle.model}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={group.vehicle.status} />
+            <PartsCostDocumentButton
+              vehicle={group.vehicle}
+              parts={group.parts.map((p) => ({
+                id: p.id,
+                part_name: p.part_name,
+                quantity: p.quantity,
+                unit_price: p.unit_price,
+                supplier: p.supplier,
+                status: p.status,
+                repair_action: p.repair_action,
+                lineTotal: p.unit_price != null ? p.quantity * p.unit_price : 0,
+              }))}
+              compact
+            />
+            {phase && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                {PARTS_SUMMARY_LABELS[phase]}
+              </span>
+            )}
+          </div>
+        </div>
+      </summary>
+
+      <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+        {approval && <PartsListApprovalPanel approval={approval} onUpdated={refresh} />}
+        <MarkAllPartsReadyButton
+          vehicleId={group.vehicle.id}
+          parts={group.parts}
+          onUpdated={async (result) => {
+            onFeedback("");
+            if (result?.allReady) {
+              onFeedback(
+                `Toutes les pièces prêtes pour ${group.vehicle.license_plate} — le chef d'atelier est notifié pour planification.`
+              );
+            }
+            await refresh();
+          }}
+        />
+        {group.parts.map((part) => (
+          <div key={part.id} className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <p className="font-medium text-slate-900">{part.part_name}</p>
+            <p className="text-sm text-slate-500">
+              Qté {part.quantity}
+              {part.supplier && ` · ${part.supplier}`}
+              {" · "}
+              {PART_STATUS_LABELS[part.status] ?? part.status}
+            </p>
+            <PartPricingEditor
+              part={{
+                id: part.id,
+                part_name: part.part_name,
+                quantity: part.quantity,
+                unit_price: part.unit_price,
+                supplier: part.supplier,
+                status: part.status,
+                repair_action: part.repair_action,
+                lineTotal:
+                  part.unit_price != null ? part.quantity * part.unit_price : 0,
+              }}
+              onSaved={refresh}
+            />
+            <StorekeeperPartStatusControls
+              part={part}
+              licensePlate={group.vehicle.license_plate}
+              partsListStatus={group.vehicle.parts_list_status}
+              onUpdated={refresh}
+            />
+            <PartReceiptControls
+              part={part}
+              vehicleId={group.vehicle.id}
+              onUpdated={async (result) => {
+                onFeedback("");
+                if (result?.allReady) {
+                  onFeedback(
+                    `Toutes les pièces prêtes — ${group.vehicle.license_plate}. Le chef d'atelier planifiera la réparation.`
+                  );
+                }
+                await refresh();
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

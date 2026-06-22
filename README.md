@@ -9,11 +9,7 @@ Application web/mobile de gestion de workflow pour garage / magasin de véhicule
 ### 1. Supabase
 
 1. Créez un projet sur [supabase.com](https://supabase.com).
-2. Dans **SQL Editor**, exécutez dans l’ordre :
-   - `supabase/migrations/001_schema.sql`
-   - `supabase/migrations/002_seed.sql`
-   - `supabase/migrations/003_storage.sql`
-   - `supabase/migrations/004_realtime.sql`
+2. Dans **SQL Editor**, exécutez **tous** les fichiers de `supabase/migrations/` dans l’ordre numérique (`001` … `015`).
 3. Vérifiez que Realtime est activé pour `vehicles`, `notifications`, `mechanic_assignments`.
 
 ### 2. Application
@@ -32,10 +28,13 @@ Ouvrez [http://localhost:3000](http://localhost:3000).
 
 1. Connectez le dépôt GitHub à Netlify.
 2. Build command : `npm run build` (déjà dans `netlify.toml`).
-3. Ajoutez les variables d'environnement :
+3. **Ne définissez pas** de répertoire de publication — le plugin Next.js s’en charge.
+4. Ajoutez les variables d'environnement :
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. Déployez. Le plugin `@netlify/plugin-nextjs` gère le runtime Next.js automatiquement.
+   - *(optionnel)* `GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` pour la synchro calendrier expert
+5. Node **20** est configuré via `netlify.toml` (`NODE_VERSION`).
+6. Déployez. `@netlify/plugin-nextjs` (dans `devDependencies`) gère le runtime Next.js (App Router, middleware, routes API).
 
 > Ne lancez pas `npm run build` pendant que `npm run dev` tourne en local (risque de corruption du cache `.next`).
 

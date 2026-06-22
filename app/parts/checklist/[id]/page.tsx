@@ -150,7 +150,11 @@ export default function StorekeeperChecklistPage() {
         </p>
       </div>
 
-      <ReconditioningChecklist state={checklist} onChange={handleChecklistChange} />
+      <ReconditioningChecklist
+        state={checklist}
+        onChange={handleChecklistChange}
+        readOnly={Boolean(submittedAt)}
+      />
 
       <div className="card-padded mt-8 space-y-4">
         {submitSuccess && (

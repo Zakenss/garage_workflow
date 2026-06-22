@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, parseSession, getRoleHome, canAccess } from "@/lib/auth";
 
-const PUBLIC = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/session"];
+const PUBLIC = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/session",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -105,6 +105,7 @@ export default function FollowupVehiclePage() {
     problem: string;
     partsNeeded: string;
     photoPaths: string[];
+    problemCategory: import("@/lib/constants").IssueCategory;
   }) {
     if (!user) return;
     setSubmitting(true);
@@ -115,6 +116,7 @@ export default function FollowupVehiclePage() {
         problem: data.problem,
         partsNeeded: data.partsNeeded,
         photoPaths: data.photoPaths,
+        problemCategory: data.problemCategory,
       });
       setSuccess("Signalement envoyé au chef d'atelier pour validation.");
       await load();
@@ -186,7 +188,13 @@ export default function FollowupVehiclePage() {
 
   const allPartsReceived =
     parts.length > 0 &&
-    parts.every((p) => p && (p.status === "received" || p.status === "in_stock"));
+    parts.every(
+      (p) =>
+        p &&
+        (p.status === "received" ||
+          p.status === "in_stock" ||
+          p.status === "ready_for_mechanic")
+    );
 
   return (
     <AppShell

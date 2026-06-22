@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Alert } from "@/components/Alert";
+import { IssueCategoryPicker } from "@/components/IssueCategoryPicker";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import type { IssueCategory } from "@/lib/constants";
 import { getPublicUrl } from "@/lib/supabase";
 import type { ChecklistItemIssue } from "@/lib/reconditioning-checklist";
 
@@ -21,6 +23,9 @@ export function ChecklistIssueModal({
 }) {
   const [problem, setProblem] = useState(initialIssue?.problem ?? "");
   const [partsNeeded, setPartsNeeded] = useState(initialIssue?.partsNeeded ?? "");
+  const [problemCategory, setProblemCategory] = useState<IssueCategory | null>(
+    initialIssue?.problemCategory ?? null
+  );
   const [photoPaths, setPhotoPaths] = useState<string[]>(initialIssue?.photoPaths ?? []);
   const [error, setError] = useState("");
 
@@ -46,10 +51,15 @@ export function ChecklistIssueModal({
       setError("Indiquez les pièces nécessaires (ou « aucune »).");
       return;
     }
+    if (!problemCategory) {
+      setError("Précisez s'il s'agit d'un problème mécanique ou carrosserie.");
+      return;
+    }
     onSave({
       problem: problem.trim(),
       photoPaths,
       partsNeeded: partsNeeded.trim(),
+      problemCategory,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -70,10 +80,15 @@ export function ChecklistIssueModal({
           Signalement — {itemLabel}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Les 3 champs sont obligatoires pour enregistrer.
+          Les 4 champs sont obligatoires pour enregistrer.
         </p>
 
         <div className="mt-4 space-y-4">
+          <IssueCategoryPicker
+            value={problemCategory}
+            onChange={setProblemCategory}
+          />
+
           <label className="label-field">
             Quel est le problème ?
             <textarea

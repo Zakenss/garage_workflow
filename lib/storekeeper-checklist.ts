@@ -1,7 +1,9 @@
 import {
   addChecklistItem,
   countChecklistProgress,
+  deleteChecklistGroup,
   deleteChecklistItem,
+  deleteChecklistSection,
   toggleChecklistItem,
   type ChecklistGroup,
   type ChecklistItem,
@@ -19,7 +21,9 @@ export type {
 export {
   addChecklistItem,
   countChecklistProgress,
+  deleteChecklistGroup,
   deleteChecklistItem,
+  deleteChecklistSection,
   toggleChecklistItem,
 };
 

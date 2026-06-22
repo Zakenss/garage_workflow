@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingPage } from "@/components/LoadingPage";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
+import { RepairCostReportPanel } from "@/components/RepairCostReportPanel";
 import { STATUS_LABELS, TIMELINE_LABELS } from "@/lib/constants";
 import { navForRole } from "@/lib/role-nav";
 import { getPublicUrl, supabase } from "@/lib/supabase";
@@ -114,6 +115,12 @@ export default function VehicleDetailPage() {
         <h2 className="section-title mb-4">Avancement</h2>
         <WorkflowProgress status={vehicle.status} />
       </section>
+
+      <RepairCostReportPanel
+        vehicleId={vehicle.id}
+        repairCompletedAt={vehicle.repair_completed_at ?? null}
+        user={user}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card-padded">

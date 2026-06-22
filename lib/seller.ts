@@ -11,6 +11,7 @@ export type SellerVehicle = Vehicle & {
   seller_expert_name?: string | null;
   seller_expert_date?: string | null;
   seller_expert_time?: string | null;
+  seller_expert_calendar_event_id?: string | null;
 };
 
 export type SellerExpertInput = {
@@ -94,6 +95,32 @@ export async function markVehicleWashed(
   if (error) throw error;
 
   await addTimeline(vehicleId, user.id, "vehicle_washed", {});
+}
+
+export async function unmarkVehicleWashed(
+  vehicleId: string,
+  user: SessionUser
+): Promise<void> {
+  const { data: vehicle } = await supabase
+    .from("vehicles")
+    .select("status, washed_at")
+    .eq("id", vehicleId)
+    .single();
+
+  if (!vehicle?.washed_at) {
+    throw new Error("Ce véhicule n'est pas marqué comme lavé.");
+  }
+  if (vehicle.status !== "ready_to_sell") {
+    throw new Error("Impossible d'annuler le lavage après la mise en vente.");
+  }
+
+  const { error } = await supabase
+    .from("vehicles")
+    .update({ washed_at: null })
+    .eq("id", vehicleId);
+  if (error) throw error;
+
+  await addTimeline(vehicleId, user.id, "vehicle_wash_undone", {});
 }
 
 export async function saveFinalPhotos(

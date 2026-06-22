@@ -20,6 +20,7 @@ import {
   saveExpertAppointment,
   saveFinalPhotos,
   setSellerSaleStatus,
+  unmarkVehicleWashed,
   type FinalPhoto,
   type SellerVehicle,
 } from "@/lib/seller";
@@ -116,7 +117,25 @@ function ReadySaleContent() {
     setFeedback("");
     try {
       await saveExpertAppointment(selected.id, expert, user);
-      setFeedback("Rendez-vous expert enregistré.");
+      try {
+        const calRes = await fetch("/api/calendar/expert-appointment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vehicleId: selected.id, expert }),
+        });
+        const calData = (await calRes.json()) as { synced?: boolean; error?: string };
+        if (calData.error && calRes.status >= 400) {
+          setFeedback(
+            "Rendez-vous enregistré. Synchronisation Google Calendar indisponible."
+          );
+        } else if (calData.synced) {
+          setFeedback("Rendez-vous expert enregistré et synchronisé avec Google Calendar.");
+        } else {
+          setFeedback("Rendez-vous expert enregistré.");
+        }
+      } catch {
+        setFeedback("Rendez-vous expert enregistré (calendrier non synchronisé).");
+      }
       const list = await fetchSellerVehicles();
       setVehicles(list);
       const updated = list.find((v) => v.id === selected.id);
@@ -141,6 +160,24 @@ function ReadySaleContent() {
       if (updated) await selectVehicle(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de marquer comme lavé.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUnmarkWashed() {
+    if (!user || !selected) return;
+    setBusy(true);
+    setError("");
+    try {
+      await unmarkVehicleWashed(selected.id, user);
+      setFeedback("Lavage annulé.");
+      const list = await fetchSellerVehicles();
+      setVehicles(list);
+      const updated = list.find((v) => v.id === selected.id);
+      if (updated) await selectVehicle(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible d'annuler le lavage.");
     } finally {
       setBusy(false);
     }
@@ -360,13 +397,25 @@ function ReadySaleContent() {
           <section className="card-padded space-y-4">
             <h3 className="section-title">2. Lavage</h3>
             {selected.washed_at ? (
-              <Alert variant="success">
-                Lavé le{" "}
-                {new Date(selected.washed_at).toLocaleString("fr-FR", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
-              </Alert>
+              <div className="space-y-3">
+                <Alert variant="success">
+                  Lavé le{" "}
+                  {new Date(selected.washed_at).toLocaleString("fr-FR", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </Alert>
+                {selected.status === "ready_to_sell" && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleUnmarkWashed}
+                    className="btn-secondary w-full sm:!w-auto"
+                  >
+                    Annuler le lavage
+                  </button>
+                )}
+              </div>
             ) : (
               <button
                 type="button"

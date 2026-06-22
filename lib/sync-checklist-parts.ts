@@ -1,9 +1,11 @@
 import type { ChecklistState } from "./reconditioning-checklist";
+import { initVehiclePartsListDraft } from "./parts-approval";
 import { supabase } from "./supabase";
 
 export type ChecklistPartNotes = {
   checklistItemId: string;
   problem?: string;
+  problemCategory?: import("./constants").IssueCategory;
 };
 
 export function isPartsNeededText(text: string): boolean {
@@ -32,6 +34,7 @@ export function collectChecklistPartRequests(state: ChecklistState) {
     itemLabel: string;
     partsNeeded: string;
     problem: string;
+    problemCategory?: import("./constants").IssueCategory;
     photoPaths: string[];
   }> = [];
 
@@ -44,6 +47,7 @@ export function collectChecklistPartRequests(state: ChecklistState) {
           itemLabel: item.label,
           partsNeeded: item.issue.partsNeeded.trim(),
           problem: item.issue.problem,
+          problemCategory: item.issue.problemCategory,
           photoPaths: item.issue.photoPaths ?? [],
         });
       }
@@ -59,6 +63,7 @@ export function collectChecklistSignalements(state: ChecklistState) {
     itemLabel: string;
     partsNeeded: string;
     problem: string;
+    problemCategory?: import("./constants").IssueCategory;
     photoPaths: string[];
   }> = [];
 
@@ -75,6 +80,7 @@ export function collectChecklistSignalements(state: ChecklistState) {
           itemLabel: item.label,
           problem,
           partsNeeded,
+          problemCategory: item.issue.problemCategory,
           photoPaths,
         });
       }
@@ -89,6 +95,9 @@ export async function syncChecklistPartsToDb(
   state: ChecklistState
 ) {
   const requests = collectChecklistPartRequests(state);
+  if (requests.length > 0) {
+    await initVehiclePartsListDraft(vehicleId);
+  }
   const activeItemIds = new Set<string>();
 
   const { data: existingParts } = await supabase
@@ -107,6 +116,7 @@ export async function syncChecklistPartsToDb(
     const notes = JSON.stringify({
       checklistItemId: req.itemId,
       problem: req.problem,
+      problemCategory: req.problemCategory,
     } satisfies ChecklistPartNotes);
     const part_name = `[${req.itemLabel}] ${req.partsNeeded}`;
     const photo_path = req.photoPaths[0] ?? null;

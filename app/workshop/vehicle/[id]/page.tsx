@@ -11,6 +11,7 @@ import { MechanicSlotButtons } from "@/components/MechanicSlotButtons";
 import { PriorityBadge } from "@/components/VehicleCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MechanicWorkPanel } from "@/components/MechanicWorkPanel";
+import { RepairCostReportPanel } from "@/components/RepairCostReportPanel";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import {
   assignVehicleToMechanic,
@@ -141,6 +142,14 @@ export default function WorkshopVehiclePage() {
         <h2 className="section-title mb-4">Avancement atelier</h2>
         <WorkflowProgress status={vehicle.status} />
       </section>
+
+      <div className="mb-6">
+        <RepairCostReportPanel
+          vehicleId={vehicle.id}
+          repairCompletedAt={vehicle.repair_completed_at ?? null}
+          user={user}
+        />
+      </div>
 
       {vehicle.status === "in_workshop" && (
         <Alert variant="success" className="mb-6">

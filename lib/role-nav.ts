@@ -8,13 +8,14 @@ export const ADMIN_NAV = [
   { href: "/parts", label: "Photos et problèmes" },
   { href: "/dashboard/supervision", label: "Supervision" },
   { href: "/parts/costs", label: "Coûts pièces" },
+  { href: "/vehicles/repair-reports", label: "Rapports réparation" },
   { href: "/users", label: "Utilisateurs" },
 ] as const;
 
 export const TRACKING_LINK = { href: "/vehicles/tracking", label: "Suivi véhicules" } as const;
 
 export const MECHANIC_NAV = [
-  { href: "/vehicles/my", label: "Mes véhicules" },
+  { href: "/vehicles/my", label: "Mon planning" },
   { href: "/vehicles/followup", label: "Signalements" },
   TRACKING_LINK,
 ] as const;

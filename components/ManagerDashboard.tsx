@@ -14,6 +14,7 @@ import {
 } from "@/lib/manager";
 import { assignVehicleToMechanic } from "@/lib/manager-actions";
 import { fetchManagerPipelineCounts, fetchPendingFinalValidationCount } from "@/lib/manager-pipeline";
+import { countPendingPartsApprovals } from "@/lib/parts-approval";
 import { supabase } from "@/lib/supabase";
 import {
   fetchAssignedVehicles,
@@ -32,21 +33,25 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
   const [pendingReception, setPendingReception] = useState(0);
   const [pendingVei, setPendingVei] = useState(0);
   const [pendingFinalValidation, setPendingFinalValidation] = useState(0);
+  const [pendingPartsApproval, setPendingPartsApproval] = useState(0);
   const [busySlot, setBusySlot] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [waitingList, assignedList, pipeline, finalValidationCount] = await Promise.all([
+    const [waitingList, assignedList, pipeline, finalValidationCount, partsApprovalCount] =
+      await Promise.all([
       fetchWaitingVehicles(),
       fetchAssignedVehicles(),
       fetchManagerPipelineCounts(),
       fetchPendingFinalValidationCount(),
+      countPendingPartsApprovals(),
     ]);
     setWaiting(waitingList);
     setAssigned(assignedList);
     setPendingReception(pipeline.pendingReception);
     setPendingVei(pipeline.pendingVei);
     setPendingFinalValidation(finalValidationCount);
+    setPendingPartsApproval(partsApprovalCount);
 
     const { data: mechanicsData } = await supabase
       .from("users")
@@ -102,7 +107,7 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
     <AppShell user={user} nav={[...MANAGER_NAV]}>
       <PageHeader title="Tableau de bord" subtitle="Vue d'ensemble atelier" />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="Réception"
           value={pendingReception}
@@ -122,6 +127,12 @@ export function ManagerDashboard({ user }: { user: SessionUser }) {
           highlight={waiting.length > 0}
         />
         <StatCard label="En atelier" value={activeCount} href="/workshop/in-workshop" />
+        <StatCard
+          label="Validation pièces"
+          value={pendingPartsApproval}
+          href="/workshop/parts-approval"
+          highlight={pendingPartsApproval > 0}
+        />
         <StatCard
           label="Validation finale"
           value={pendingFinalValidation}

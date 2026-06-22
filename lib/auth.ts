@@ -28,14 +28,31 @@ export function canAccess(role: UserRole, path: string): boolean {
   if (role === "admin") return true;
   if (path.startsWith("/login")) return true;
 
+  if (
+    role === "mechanic" &&
+    (path.startsWith("/vehicles/repair-reports") ||
+      path.startsWith("/api/repair-cost-report"))
+  ) {
+    return false;
+  }
+
   const rules: Partial<Record<UserRole, string[]>> = {
-    secretary: ["/vehicles/arrivals", "/vehicles/manage", "/vehicles/tracking", "/vehicles/"],
+    secretary: [
+      "/vehicles/arrivals",
+      "/vehicles/manage",
+      "/vehicles/tracking",
+      "/vehicles/repair-reports",
+      "/vehicles/",
+      "/parts/costs",
+    ],
     workshop_manager: [
       "/dashboard",
       "/workshop/reception",
       "/workshop/assign",
       "/workshop/in-workshop",
       "/workshop/queue",
+      "/workshop/schedule",
+      "/workshop/parts-approval",
       "/workshop/termine",
       "/workshop/final",
       "/workshop/issues",
@@ -43,6 +60,7 @@ export function canAccess(role: UserRole, path: string): boolean {
       "/workshop/vei",
       "/parts",
       "/vehicles/tracking",
+      "/vehicles/repair-reports",
       "/vehicles/",
     ],
     mechanic: [
@@ -54,9 +72,14 @@ export function canAccess(role: UserRole, path: string): boolean {
       "/vehicles/tracking",
       "/vehicles/",
     ],
-    storekeeper: ["/parts", "/vehicles/tracking", "/vehicles/"],
+    storekeeper: [
+      "/parts",
+      "/vehicles/tracking",
+      "/vehicles/repair-reports",
+      "/vehicles/",
+    ],
     bodyworker: ["/bodywork", "/vehicles/tracking", "/vehicles/"],
-    seller: ["/vehicles/ready-sale", "/vehicles/"],
+    seller: ["/vehicles/ready-sale", "/vehicles/", "/api/calendar"],
   };
 
   const allowed = rules[role] ?? [];

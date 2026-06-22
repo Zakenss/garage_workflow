@@ -51,6 +51,10 @@ export function NotificationsBell({ user }: { user: SessionUser }) {
   async function openNotification(n: Notification) {
     await markRead(n.id);
     setOpen(false);
+    if (n.vehicle_id && user.role === "bodyworker") {
+      router.push("/bodywork");
+      return;
+    }
     if (n.vehicle_id && user.role === "seller") {
       router.push(`/vehicles/ready-sale?vehicle=${n.vehicle_id}`);
       return;
@@ -60,7 +64,25 @@ export function NotificationsBell({ user }: { user: SessionUser }) {
         router.push(`/workshop/final/${n.vehicle_id}`);
         return;
       }
+      if (n.type === "parts_list_pending_approval") {
+        router.push("/workshop/parts-approval");
+        return;
+      }
+      if (n.type === "parts_ready_for_scheduling") {
+        router.push("/workshop/schedule");
+        return;
+      }
       router.push(`/vehicles/tracking?vehicle=${n.vehicle_id}`);
+    }
+    if (n.vehicle_id && user.role === "storekeeper") {
+      if (n.type === "parts_list_approved" || n.type === "parts_list_rejected") {
+        router.push("/parts");
+        return;
+      }
+    }
+    if (n.vehicle_id && user.role === "mechanic" && n.type === "repair_scheduled") {
+      router.push("/vehicles/my");
+      return;
     }
   }
 

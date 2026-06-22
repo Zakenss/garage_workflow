@@ -1,14 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { PART_STATUS_LABELS } from "@/lib/constants";
 import { formatEuro, savePartPricing, type PartCostLine } from "@/lib/parts-costs";
-
-const STATUS_LABELS: Record<string, string> = {
-  in_stock: "En stock",
-  to_order: "À commander",
-  ordered: "Commandée",
-  received: "Reçue",
-};
+import { partStatusDetailLabel } from "@/lib/part-repair-routing";
 
 export function PartPricingEditor({
   part,
@@ -57,7 +52,9 @@ export function PartPricingEditor({
         <div>
           <p className="font-medium text-slate-900">{part.part_name}</p>
           <p className="text-sm text-slate-500">
-            Qté {part.quantity} · {STATUS_LABELS[part.status] ?? part.status}
+            Qté {part.quantity} · {PART_STATUS_LABELS[part.status] ?? part.status}
+            {partStatusDetailLabel(part.status, part.repair_action) &&
+              ` (${partStatusDetailLabel(part.status, part.repair_action)})`}
           </p>
         </div>
         {part.lineTotal > 0 && (

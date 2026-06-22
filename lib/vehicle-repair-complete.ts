@@ -1,4 +1,5 @@
 import { addTimeline, notifyRole, updateVehicleStatus } from "./db";
+import { generateAndStoreRepairCostReport } from "./repair-cost-report";
 import {
   computeIssueRepairState,
   fetchPartsForVehicle,
@@ -8,7 +9,7 @@ import { supabase } from "./supabase";
 import type { MechanicReportedIssue } from "./mechanic-issues";
 import type { SessionUser } from "./types";
 
-const PARTS_READY = new Set(["received", "in_stock"]);
+const PARTS_READY = new Set(["received", "in_stock", "ready_for_mechanic"]);
 const COMPLETABLE_STATUSES = new Set(["repair_in_progress", "validation_pending"]);
 
 export type RepairCompletionAssessment = {
@@ -128,6 +129,12 @@ export async function completeVehicleReconditioning(
   });
   await notifyRole("workshop_manager", "repair_complete", msg, vehicleId);
   await notifyRole("admin", "repair_complete", msg, vehicleId);
+
+  try {
+    await generateAndStoreRepairCostReport(vehicleId, user);
+  } catch (err) {
+    console.error("repair cost report generation failed:", err);
+  }
 }
 
 export async function tryAutoCompleteVehicleReconditioning(

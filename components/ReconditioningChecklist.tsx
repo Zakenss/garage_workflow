@@ -5,7 +5,9 @@ import { ChecklistIssueModal } from "@/components/ChecklistIssueModal";
 import {
   addChecklistItem,
   countChecklistProgress,
+  deleteChecklistGroup,
   deleteChecklistItem,
+  deleteChecklistSection,
   toggleChecklistItem,
   updateChecklistItemIssue,
   type ChecklistItemIssue,
@@ -62,6 +64,42 @@ export function ReconditioningChecklist({
     setIssueTarget(null);
   }
 
+  function confirmDelete(message: string): boolean {
+    return window.confirm(message);
+  }
+
+  function handleDeleteSection(sectionId: string, title: string) {
+    if (
+      !confirmDelete(
+        `Supprimer la section « ${title} » et tous ses composants ?`
+      )
+    ) {
+      return;
+    }
+    onChange(deleteChecklistSection(state, sectionId));
+  }
+
+  function handleDeleteGroup(sectionId: string, groupId: string, title: string) {
+    if (
+      !confirmDelete(`Supprimer le composant « ${title} » et tous ses points ?`)
+    ) {
+      return;
+    }
+    onChange(deleteChecklistGroup(state, sectionId, groupId));
+  }
+
+  function handleDeleteItem(
+    sectionId: string,
+    groupId: string,
+    itemId: string,
+    label: string
+  ) {
+    if (!confirmDelete(`Supprimer le point « ${label} » ?`)) {
+      return;
+    }
+    onChange(deleteChecklistItem(state, sectionId, groupId, itemId));
+  }
+
   return (
     <div className="space-y-4">
       <div className="card-padded sticky top-0 z-10 border-slate-200 bg-white/95 backdrop-blur">
@@ -83,17 +121,45 @@ export function ReconditioningChecklist({
 
       {state.sections.map((sec) => (
         <details key={sec.id} className="card-padded group" open>
-          <summary className="cursor-pointer list-none font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex items-center gap-2">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex min-w-0 items-center gap-2">
               <span className="text-slate-400 transition group-open:rotate-90">▸</span>
-              {sec.title}
+              <span className="truncate">{sec.title}</span>
             </span>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDeleteSection(sec.id, sec.title);
+                }}
+                className="btn-ghost shrink-0 !min-h-8 !px-2.5 text-xs text-red-600 hover:bg-red-50"
+                title="Supprimer la section"
+                aria-label={`Supprimer la section ${sec.title}`}
+              >
+                Supprimer section
+              </button>
+            )}
           </summary>
 
           <div className="mt-4 space-y-5 border-t border-slate-100 pt-4">
             {sec.groups.map((grp) => (
               <div key={grp.id}>
-                <h3 className="mb-2 text-sm font-semibold text-slate-700">{grp.title}</h3>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-700">{grp.title}</h3>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteGroup(sec.id, grp.id, grp.title)}
+                      className="btn-ghost shrink-0 !min-h-8 !px-2.5 text-xs text-red-600 hover:bg-red-50"
+                      title="Supprimer le composant"
+                      aria-label={`Supprimer le composant ${grp.title}`}
+                    >
+                      Supprimer composant
+                    </button>
+                  )}
+                </div>
                 <ul className="space-y-1">
                   {grp.items.map((it) => (
                     <li
@@ -157,10 +223,10 @@ export function ReconditioningChecklist({
                         <button
                           type="button"
                           onClick={() =>
-                            onChange(deleteChecklistItem(state, sec.id, grp.id, it.id))
+                            handleDeleteItem(sec.id, grp.id, it.id, it.label)
                           }
-                          className="btn-ghost shrink-0 !min-h-8 !px-2 text-xs text-red-600"
-                          title="Supprimer"
+                          className="btn-ghost shrink-0 !min-h-8 !px-2 text-xs text-red-600 hover:bg-red-50"
+                          title="Supprimer ce point"
                           aria-label={`Supprimer ${it.label}`}
                         >
                           Suppr.

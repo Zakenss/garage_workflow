@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { PageHeader } from "@/components/PageHeader";
 import { VehicleCostsCard } from "@/components/PartPricingEditor";
-import { ADMIN_NAV, navForRole } from "@/lib/role-nav";
+import { navForRole } from "@/lib/role-nav";
 import { useSession } from "@/lib/session-context";
 import {
   fetchAllVehiclePartCosts,
@@ -14,7 +14,11 @@ import {
   grandTotal,
   type VehiclePartsCost,
 } from "@/lib/parts-costs";
+import { canGeneratePartsCostDocument } from "@/lib/parts-cost-document";
+import { PartsCostDocumentButton } from "@/components/PartsCostDocumentButton";
 import { supabase } from "@/lib/supabase";
+
+const COSTS_ROLES = new Set(["admin", "workshop_manager", "secretary", "storekeeper"]);
 
 export default function PartsCostsPage() {
   const user = useSession();
@@ -27,7 +31,7 @@ export default function PartsCostsPage() {
   }
 
   useEffect(() => {
-    if (user?.role === "admin") load();
+    if (user && COSTS_ROLES.has(user.role)) load();
     const ch = supabase
       .channel("parts-costs")
       .on(
@@ -43,28 +47,31 @@ export default function PartsCostsPage() {
 
   if (!user) return <LoadingPage />;
 
-  if (user.role !== "admin") {
+  if (!COSTS_ROLES.has(user.role)) {
     return (
       <AppShell user={user} nav={navForRole(user.role)}>
-        <EmptyState title="Accès réservé à l'administration" />
+        <EmptyState title="Accès non autorisé" />
       </AppShell>
     );
   }
 
-  const total = grandTotal(groups);
+  const orderedGroups = groups.filter((g) => canGeneratePartsCostDocument(g.parts));
+  const total = grandTotal(orderedGroups);
 
   return (
-    <AppShell user={user} nav={[...ADMIN_NAV]}>
+    <AppShell user={user} nav={navForRole(user.role)}>
       <PageHeader
         title="Coûts pièces par véhicule"
-        subtitle="Fournisseur et prix saisis par le magasinier — totaux calculés automatiquement"
+        subtitle="Récapitulatif après commande magasinier — générez un document avec le détail et le total"
       />
 
-      {!loading && groups.length > 0 && (
+      {!loading && orderedGroups.length > 0 && (
         <div className="card-padded mb-6 border-emerald-200 bg-emerald-50/80">
-          <p className="text-sm text-emerald-800">Total parc (pièces tarifées)</p>
+          <p className="text-sm text-emerald-800">Total parc (pièces commandées et tarifées)</p>
           <p className="text-3xl font-bold text-emerald-950">{formatEuro(total)}</p>
-          <p className="mt-1 text-sm text-emerald-800">{groups.length} véhicule(s)</p>
+          <p className="mt-1 text-sm text-emerald-800">
+            {orderedGroups.length} véhicule(s) avec pièces commandées
+          </p>
         </div>
       )}
 
@@ -74,15 +81,29 @@ export default function PartsCostsPage() {
             <div key={i} className="skeleton h-24 rounded-xl" />
           ))}
         </div>
-      ) : groups.length === 0 ? (
+      ) : orderedGroups.length === 0 ? (
         <EmptyState
-          title="Aucun coût enregistré"
-          description="Le magasinier doit renseigner fournisseur et prix pour chaque pièce."
+          title="Aucun document disponible"
+          description="Le magasinier doit d'abord commander les pièces (statut « Commandée » ou au-delà) et renseigner les prix."
         />
       ) : (
         <div className="space-y-3">
-          {groups.map((g) => (
-            <VehicleCostsCard key={g.vehicle.id} group={g} />
+          {orderedGroups.map((g) => (
+            <div key={g.vehicle.id} className="card-padded space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">{g.vehicle.license_plate}</p>
+                  <p className="text-sm text-slate-600">
+                    {g.vehicle.make} {g.vehicle.model}
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">
+                    {formatEuro(g.totalCost)}
+                  </p>
+                </div>
+                <PartsCostDocumentButton vehicle={g.vehicle} parts={g.parts} />
+              </div>
+              <VehicleCostsCard group={g} defaultOpen />
+            </div>
           ))}
         </div>
       )}

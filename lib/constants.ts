@@ -66,10 +66,34 @@ export const PART_STATUS_LABELS: Record<string, string> = {
   in_stock: "En stock",
   to_order: "À commander",
   ordered: "Commandée",
+  to_repair: "À réparer",
   received: "Reçue",
+  ready_for_mechanic: "Prête mécanicien",
 };
 
-export const PART_STATUSES = ["in_stock", "to_order", "ordered", "received"] as const;
+export const PART_STATUSES = [
+  "in_stock",
+  "to_order",
+  "ordered",
+  "to_repair",
+  "received",
+  "ready_for_mechanic",
+] as const;
+
+export type PartStatus = (typeof PART_STATUSES)[number];
+
+export const ISSUE_CATEGORIES = ["mechanical", "bodywork"] as const;
+export type IssueCategory = (typeof ISSUE_CATEGORIES)[number];
+
+export const ISSUE_CATEGORY_LABELS: Record<IssueCategory, string> = {
+  mechanical: "Mécanique",
+  bodywork: "Carrosserie",
+};
+
+export const ISSUE_CATEGORY_COLORS: Record<IssueCategory, string> = {
+  mechanical: "bg-blue-100 text-blue-900",
+  bodywork: "bg-violet-100 text-violet-900",
+};
 
 export const TIMELINE_LABELS: Record<string, string> = {
   vehicle_arrived: "Véhicule enregistré à l'arrivée",
@@ -81,7 +105,21 @@ export const TIMELINE_LABELS: Record<string, string> = {
   vei_updated: "Dossier VEI modifié",
   status_change: "Changement de statut",
   followup_repair_started: "Réparation complémentaire démarrée",
-  followup_repair_completed: "Réparation complémentaire terminée",
+  part_sent_to_bodywork: "Pièce envoyée au carrossier",
+  part_marked_replace: "Pièce à remplacer",
+  parts_list_submitted: "Liste pièces soumise au chef d'atelier",
+  parts_list_approved: "Liste pièces validée",
+  parts_list_rejected: "Liste pièces refusée",
+  part_received: "Pièce réceptionnée",
+  part_ready_for_mechanic: "Pièce prête pour le mécanicien",
+  repair_scheduled: "Réparation planifiée",
+  vehicle_washed: "Véhicule marqué comme lavé",
+  vehicle_wash_undone: "Lavage annulé",
+  seller_expert_scheduled: "Rendez-vous expert planifié",
+  seller_status_change: "Statut vente mis à jour",
+  reconditioning_complete: "Reconditionnement terminé",
+  repair_cost_report_generated: "Rapport coût réparation généré",
+  repair_cost_report_regenerated: "Rapport coût réparation régénéré",
 };
 
 export const WORKFLOW_STEP_LABELS: Record<string, string> = {
